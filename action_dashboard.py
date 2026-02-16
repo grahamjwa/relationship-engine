@@ -224,15 +224,15 @@ def main():
                     with col2:
                         st.caption(f"{p['reason']}: {p['detail']}")
                     with col3:
-                        if st.button("Log Touch", key=f"log_{i}_{p['id']}"):
+                        if st.button("Log Touch", key=f"log_{p['id']}"):
                             st.session_state[f"show_log_{p['id']}"] = True
                     
                     # Show log form if button clicked
                     if st.session_state.get(f"show_log_{p['id']}"):
-                        with st.form(key=f"form_{i}_{p['id']}"):
-                            otype = st.selectbox("Type", ["email", "call", "linkedin", "meeting"], key=f"type_{i}_{p['id']}")
-                            outcome = st.selectbox("Outcome", ["pending", "no_response", "responded_positive", "meeting_booked"], key=f"out_{i}_{p['id']}")
-                            notes = st.text_input("Notes", key=f"notes_{i}_{p['id']}")
+                        with st.form(key=f"form_{p['id']}"):
+                            otype = st.selectbox("Type", ["email", "call", "linkedin", "meeting"], key=f"type_{p['id']}")
+                            outcome = st.selectbox("Outcome", ["pending", "no_response", "responded_positive", "meeting_booked"], key=f"out_{p['id']}")
+                            notes = st.text_input("Notes", key=f"notes_{p['id']}")
                             if st.form_submit_button("Save"):
                                 log_outreach(p['id'], None, otype, outcome, notes)
                                 st.success(f"Logged {otype} to {p['name']}")
