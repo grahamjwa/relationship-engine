@@ -394,12 +394,12 @@ def identify_high_priority(conn: sqlite3.Connection) -> List[Dict]:
             seen_companies.add(row[0])
             results.append({
                 'type': 'recent_funding',
-                'company_id': row[0],
-                'company_name': row[1],
+                    'company_id': row[0],
+                    'company_name': row[1],
                 'detail': f"{row[2]}: ${row[3]:,.0f}" if row[3] else row[2],
-                'date': row[4],
-                'priority': 'high'
-            })
+                    'date': row[4],
+                    'priority': 'high'
+                })
     
     # Lease expiry in next 12 months
     cur.execute("""
@@ -417,12 +417,12 @@ def identify_high_priority(conn: sqlite3.Connection) -> List[Dict]:
             seen_companies.add(row[0])
             results.append({
                 'type': 'lease_expiring',
-                'company_id': row[0],
-                'company_name': row[1],
+                    'company_id': row[0],
+                    'company_name': row[1],
                 'detail': f"{row[3]:,} SF at {row[4]}" if row[3] else row[4],
                 'date': row[2],
-                'priority': 'high'
-            })
+                    'priority': 'high'
+                })
     
     # High-relevance hiring signal in last 30 days
     cur.execute("""
@@ -437,13 +437,14 @@ def identify_high_priority(conn: sqlite3.Connection) -> List[Dict]:
     for row in cur.fetchall():
         if row[0] not in seen_companies:
             seen_companies.add(row[0])
-            'type': 'high_value_hire',
-            'company_id': row[0],
-            'company_name': row[1],
-            'detail': row[3] or row[2],
-            'date': row[4],
-            'priority': 'high'
-        })
+            results.append({
+                'type': 'high_value_hire',
+                'company_id': row[0],
+                'company_name': row[1],
+                'detail': row[3] or row[2],
+                'date': row[4],
+                'priority': 'high'
+            })
     
     return results
 
@@ -468,13 +469,13 @@ def identify_undercovered(conn: sqlite3.Connection) -> List[Dict]:
     for row in cur.fetchall():
         results.append({
             'type': 'undercovered',
-            'company_id': row[0],
-            'company_name': row[1],
+                'company_id': row[0],
+                'company_name': row[1],
             'status': row[2],
             'sector': row[3],
             'last_outreach': row[4],
             'priority': 'medium'
-        })
+            })
     
     return results
 
@@ -500,12 +501,12 @@ def identify_relationships_at_risk(conn: sqlite3.Connection) -> List[Dict]:
     for row in cur.fetchall():
         results.append({
             'type': 'relationship_at_risk',
-            'company_id': row[0],
-            'company_name': row[1],
+                'company_id': row[0],
+                'company_name': row[1],
             'last_outreach': row[2],
             'last_outcome': row[3],
-            'priority': 'high'
-        })
+                'priority': 'high'
+            })
     
     return results
 

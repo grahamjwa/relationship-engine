@@ -188,7 +188,9 @@ def run_streamlit_dashboard():
     # Sidebar navigation
     page = st.sidebar.selectbox(
         "Navigate",
-        ["Overview", "🎯 Opportunities", "⚠️ At Risk", "Centrality Leaderboard", "2-Hop Leverage", "Clusters", 
+        ["Overview", "🎯 Opportunities", "⚠️ At Risk", "📋 Monitored Clients", 
+         "🏆 Target Ranking", "💰 Funded - Need Outreach",
+         "Centrality Leaderboard", "2-Hop Leverage", "Clusters", 
          "Path Finder", "Upcoming Expirations", "Funding Events", 
          "Hiring Signals", "Untouched Targets", "Overdue Follow-ups"]
     )
@@ -294,6 +296,132 @@ def run_streamlit_dashboard():
                 st.success("All client relationships are healthy!")
         else:
             st.warning("Opportunity scoring not available.")
+    
+    elif page == "📋 Monitored Clients":
+        st.header("📋 Monitored Clients")
+        st.write("Active client relationships requiring regular check-ins")
+        
+        conn = get_conn()
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        # Get monitored clients with company details
+        cur.execute("""
+            SELECT mc.id, c.name as company_name, c.status, c.sector,
+                   mc.last_deal_date, mc.last_deal_type, mc.last_deal_value,
+                   mc.check_in_frequency, mc.notes,
+                   con.first_name || ' ' || con.last_name as relationship_owner
+            FROM monitored_clients mc
+            JOIN companies c ON mc.company_id = c.id
+            LEFT JOIN contacts con ON mc.relationship_owner_id = con.id
+            ORDER BY mc.last_deal_date DESC
+        """)
+        monitored = [dict(row) for row in cur.fetchall()]
+        
+        if monitored:
+            st.dataframe(monitored)
+            
+            # Summary stats
+            st.subheader("Summary")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Monitored", len(monitored))
+            with col2:
+                weekly = sum(1 for m in monitored if m.get('check_in_frequency') == 'weekly')
+                st.metric("Weekly Check-ins", weekly)
+            with col3:
+                monthly = sum(1 for m in monitored if m.get('check_in_frequency') == 'monthly')
+                st.metric("Monthly Check-ins", monthly)
+        else:
+            st.info("No monitored clients yet. Add clients to the monitored_clients table.")
+            
+            # Show active clients that could be monitored
+            st.subheader("Active Clients (Not Yet Monitored)")
+            cur.execute("""
+                SELECT c.id, c.name, c.sector, c.status
+                FROM companies c
+                WHERE c.status = 'active_client'
+                AND c.id NOT IN (SELECT company_id FROM monitored_clients)
+                ORDER BY c.name
+            """)
+            unmonitored = [dict(row) for row in cur.fetchall()]
+            if unmonitored:
+                st.dataframe(unmonitored)
+                st.write("To add a client to monitoring, run:")
+                st.code("""sqlite3 ~/relationship_engine/data/relationship_engine.db "
+INSERT INTO monitored_clients (company_id, last_deal_date, check_in_frequency)
+VALUES (<company_id>, '<YYYY-MM-DD>', 'monthly');
+" """)
+        
+        conn.close()
+    
+    elif page == "🏆 Target Ranking":
+        st.header("🏆 Target Ranking")
+        st.write("Companies ranked by opportunity score — prioritize outreach accordingly")
+        
+        conn = get_conn()
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT name, status, sector, opportunity_score, last_outreach, recent_funding_count
+            FROM v_target_ranking
+            ORDER BY opportunity_score DESC
+            LIMIT 25
+        """)
+        targets = [dict(row) for row in cur.fetchall()]
+        conn.close()
+        
+        if targets:
+            # Summary
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Targets", len(targets))
+            with col2:
+                never_contacted = sum(1 for t in targets if t['last_outreach'] == 'never')
+                st.metric("Never Contacted", never_contacted)
+            with col3:
+                with_funding = sum(1 for t in targets if t['recent_funding_count'] > 0)
+                st.metric("With Recent Funding", with_funding)
+            
+            st.subheader("Ranked Targets")
+            st.dataframe(targets)
+            
+            # Top 5 for quick action
+            st.subheader("Top 5 Priority Actions")
+            for i, t in enumerate(targets[:5], 1):
+                funding_note = f" — {t['recent_funding_count']} funding events" if t['recent_funding_count'] > 0 else ""
+                st.write(f"**{i}. {t['name']}** (Score: {t['opportunity_score']:.0f}){funding_note}")
+        else:
+            st.info("No targets found. Add companies with status: high_growth_target, prospect, or watching.")
+    
+    elif page == "💰 Funded - Need Outreach":
+        st.header("💰 Recently Funded — Need Outreach")
+        st.write("Companies that received funding but haven't been contacted since")
+        
+        conn = get_conn()
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        
+        cur.execute("""
+            SELECT name, status, round_type, amount, lead_investor, funding_date, last_outreach
+            FROM v_funded_need_outreach
+            ORDER BY funding_date DESC
+        """)
+        funded = [dict(row) for row in cur.fetchall()]
+        conn.close()
+        
+        if funded:
+            st.warning(f"{len(funded)} companies need outreach after funding")
+            
+            for f in funded:
+                amount_str = f"${f['amount']:,.0f}" if f['amount'] else "undisclosed"
+                investor_str = f" (Lead: {f['lead_investor']})" if f['lead_investor'] else ""
+                st.write(f"**{f['name']}** — {f['round_type'] or 'Funding'}: {amount_str}{investor_str}")
+                st.caption(f"Funded: {f['funding_date']} | Last outreach: {f['last_outreach']}")
+                st.divider()
+        else:
+            st.success("All recently funded companies have been contacted!")
     
     elif page == "Centrality Leaderboard":
         st.header("🏆 Centrality Leaderboard")

@@ -26,11 +26,31 @@ try:
 except ImportError:
     HAS_SIGNAL_PIPELINE = False
 
+# Import weekly digest
+try:
+    from weekly_digest import post_weekly_digest
+    HAS_WEEKLY_DIGEST = True
+except ImportError:
+    HAS_WEEKLY_DIGEST = False
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
 )
 logger = logging.getLogger("scheduler")
+
+
+def run_weekly():
+    """Run weekly digest on Sundays."""
+    if HAS_WEEKLY_DIGEST:
+        logger.info("Starting weekly digest...")
+        try:
+            post_weekly_digest()
+            logger.info("Weekly digest complete.")
+        except Exception as e:
+            logger.error(f"Weekly digest failed: {e}")
+    else:
+        logger.warning("Weekly digest not available.")
 
 
 def run_morning_scan():
@@ -102,6 +122,18 @@ def start_scheduler():
         logger.info("Scheduled: afternoon_signal_scan at 5:00 PM ET")
     else:
         logger.warning("Signal pipeline not available - skipping signal scan jobs")
+
+    # 8:00 AM ET Sunday — Weekly digest
+    if HAS_WEEKLY_DIGEST:
+        scheduler.add_job(
+            run_weekly,
+            trigger=CronTrigger(day_of_week='sun', hour=8, minute=0, timezone="US/Eastern"),
+            id="weekly_digest",
+            name="Weekly Digest",
+            misfire_grace_time=3600,
+            replace_existing=True
+        )
+        logger.info("Scheduled: weekly_digest at 8:00 AM ET on Sundays")
 
     logger.info("Scheduler started. Press Ctrl+C to exit.")
     try:
