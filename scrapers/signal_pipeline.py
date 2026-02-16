@@ -72,25 +72,32 @@ def insert_funding_event(
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     
-    # Check for duplicate (same company, same source URL)
-    cur.execute("""
-        SELECT id FROM funding_events 
-        WHERE company_id = ? AND source_url = ?
-    """, (company_id, source_url))
-    
-    if cur.fetchone():
-        conn.close()
-        return -1  # Duplicate
-    
-    # Parse amount to float if string
+    # Parse amount to float first
     amount_float = None
     if amount:
         try:
-            # Remove $, commas, and parse
             cleaned = amount.replace('$', '').replace(',', '').replace(' million', '000000').replace(' billion', '000000000')
             amount_float = float(cleaned)
         except:
             amount_float = None
+    
+    # Check for duplicate: same URL OR same company + similar amount within 7 days
+    cur.execute("""
+        SELECT id FROM funding_events 
+        WHERE company_id = ? AND (
+            source_url = ?
+            OR (
+                amount IS NOT NULL 
+                AND ? IS NOT NULL
+                AND ABS(amount - ?) < (? * 0.15)
+                AND event_date >= date('now', '-7 days')
+            )
+        )
+    """, (company_id, source_url, amount_float, amount_float, amount_float if amount_float else 1))
+    
+    if cur.fetchone():
+        conn.close()
+        return -1  # Duplicate
     
     cur.execute("""
         INSERT INTO funding_events 
