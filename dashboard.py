@@ -28,6 +28,15 @@ from graph_engine import (
     detect_clusters, find_shortest_path, get_top_centrality, get_top_leverage
 )
 
+try:
+    from opportunity_scoring import (
+        get_top_opportunities, generate_daily_insights, 
+        identify_high_priority, identify_undercovered, identify_relationships_at_risk
+    )
+    HAS_SCORING = True
+except ImportError:
+    HAS_SCORING = False
+
 
 def get_conn():
     return sqlite3.connect(get_db_path())
@@ -179,7 +188,7 @@ def run_streamlit_dashboard():
     # Sidebar navigation
     page = st.sidebar.selectbox(
         "Navigate",
-        ["Overview", "Centrality Leaderboard", "2-Hop Leverage", "Clusters", 
+        ["Overview", "🎯 Opportunities", "⚠️ At Risk", "Centrality Leaderboard", "2-Hop Leverage", "Clusters", 
          "Path Finder", "Upcoming Expirations", "Funding Events", 
          "Hiring Signals", "Untouched Targets", "Overdue Follow-ups"]
     )
@@ -208,6 +217,83 @@ def run_streamlit_dashboard():
         for i, row in enumerate(top_cent, 1):
             score = row.get('centrality_score', 0) or 0
             st.write(f"{i}. **{row['name']}** ({row['type']}): {score:.2f}")
+        
+        # Opportunity scores
+        if HAS_SCORING:
+            st.subheader("🎯 Top 5 Opportunities")
+            top_opps = get_top_opportunities(5)
+            for i, opp in enumerate(top_opps, 1):
+                st.write(f"{i}. **{opp['name']}** ({opp['status']}): {opp['opportunity_score']:.1f}")
+            
+            # Daily insights summary
+            insights = generate_daily_insights()
+            st.subheader("📊 Daily Insights")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("High Priority", len(insights['high_priority']))
+            with col2:
+                st.metric("Undercovered", len(insights['undercovered']))
+            with col3:
+                st.metric("At Risk", len(insights['at_risk']))
+    
+    elif page == "🎯 Opportunities":
+        st.header("🎯 Top Opportunities")
+        
+        if HAS_SCORING:
+            # Top opportunities by score
+            st.subheader("Ranked by Opportunity Score")
+            top_opps = get_top_opportunities(20)
+            if top_opps:
+                # Bar chart
+                names = [o['name'][:25] for o in top_opps]
+                scores = [o['opportunity_score'] or 0 for o in top_opps]
+                
+                fig, ax = plt.subplots(figsize=(10, 8))
+                y_pos = np.arange(len(names))
+                colors = ['#e74c3c' if s > 30 else '#f39c12' if s > 15 else '#3498db' for s in scores]
+                ax.barh(y_pos, scores, color=colors)
+                ax.set_yticks(y_pos)
+                ax.set_yticklabels(names)
+                ax.invert_yaxis()
+                ax.set_xlabel('Opportunity Score')
+                ax.set_title('Top 20 Opportunities')
+                plt.tight_layout()
+                st.pyplot(fig)
+                
+                st.dataframe(top_opps)
+            
+            # High priority items
+            st.subheader("🔥 High Priority Actions")
+            high_priority = identify_high_priority(get_conn())
+            if high_priority:
+                for item in high_priority[:10]:
+                    st.write(f"**{item['company_name']}** — {item['type']}: {item['detail']}")
+            else:
+                st.info("No high-priority items right now.")
+            
+            # Undercovered
+            st.subheader("📭 Undercovered Targets")
+            undercovered = identify_undercovered(get_conn())
+            if undercovered:
+                st.dataframe(undercovered)
+            else:
+                st.success("All targets have recent outreach!")
+        else:
+            st.warning("Opportunity scoring not available. Run: python3 opportunity_scoring.py")
+    
+    elif page == "⚠️ At Risk":
+        st.header("⚠️ Relationships at Risk")
+        st.write("Active clients with no recent engagement")
+        
+        if HAS_SCORING:
+            at_risk = identify_relationships_at_risk(get_conn())
+            if at_risk:
+                st.warning(f"{len(at_risk)} client relationships need attention")
+                st.dataframe(at_risk)
+            else:
+                st.success("All client relationships are healthy!")
+        else:
+            st.warning("Opportunity scoring not available.")
     
     elif page == "Centrality Leaderboard":
         st.header("🏆 Centrality Leaderboard")
