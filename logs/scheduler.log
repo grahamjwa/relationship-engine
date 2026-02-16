@@ -1,5 +1,11 @@
-2026-02-15 16:11:46,417 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
-2026-02-15 16:11:46,417 [INFO] Scheduled: nightly_recompute at 2:00 AM ET
-2026-02-15 16:11:46,417 [INFO] Scheduler started. Press Ctrl+C to exit.
-2026-02-15 16:11:46,418 [INFO] Added job "Nightly Graph Recompute" to job store "default"
-2026-02-15 16:11:46,418 [INFO] Scheduler started
+2026-02-15 16:40:03,809 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 16:40:03,809 [INFO] Scheduled: nightly_recompute at 2:00 AM ET
+2026-02-15 16:40:03,809 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 16:40:03,809 [INFO] Scheduled: morning_signal_scan at 6:00 AM ET
+2026-02-15 16:40:03,809 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 16:40:03,809 [INFO] Scheduled: afternoon_signal_scan at 5:00 PM ET
+2026-02-15 16:40:03,809 [INFO] Scheduler started. Press Ctrl+C to exit.
+2026-02-15 16:40:03,810 [INFO] Added job "Nightly Graph Recompute" to job store "default"
+2026-02-15 16:40:03,811 [INFO] Added job "Morning Signal Scan" to job store "default"
+2026-02-15 16:40:03,811 [INFO] Added job "Afternoon Signal Scan" to job store "default"
+2026-02-15 16:40:03,811 [INFO] Scheduler started
