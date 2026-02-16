@@ -33,6 +33,13 @@ try:
 except ImportError:
     HAS_WEEKLY_DIGEST = False
 
+# Import morning briefing
+try:
+    from morning_briefing import run_morning_briefing
+    HAS_MORNING_BRIEFING = True
+except ImportError:
+    HAS_MORNING_BRIEFING = False
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s"
@@ -97,6 +104,18 @@ def start_scheduler():
         replace_existing=True
     )
     logger.info("Scheduled: nightly_recompute at 2:00 AM ET")
+
+    # 7:00 AM ET — Morning briefing (proactive DM)
+    if HAS_MORNING_BRIEFING:
+        scheduler.add_job(
+            run_morning_briefing,
+            trigger=CronTrigger(hour=7, minute=0, timezone="US/Eastern"),
+            id="morning_briefing",
+            name="Morning Briefing",
+            misfire_grace_time=3600,
+            replace_existing=True
+        )
+        logger.info("Scheduled: morning_briefing at 7:00 AM ET")
 
     # 6:00 AM ET — Morning signal scan (funding + hiring)
     if HAS_SIGNAL_PIPELINE:

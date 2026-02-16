@@ -1,14 +1,17 @@
-2026-02-15 18:03:18,843 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
-2026-02-15 18:03:18,843 [INFO] Scheduled: nightly_recompute at 2:00 AM ET
-2026-02-15 18:03:18,843 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
-2026-02-15 18:03:18,843 [INFO] Scheduled: morning_signal_scan at 6:00 AM ET
-2026-02-15 18:03:18,843 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
-2026-02-15 18:03:18,843 [INFO] Scheduled: afternoon_signal_scan at 5:00 PM ET
-2026-02-15 18:03:18,843 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
-2026-02-15 18:03:18,843 [INFO] Scheduled: weekly_digest at 8:00 AM ET on Sundays
-2026-02-15 18:03:18,843 [INFO] Scheduler started. Press Ctrl+C to exit.
-2026-02-15 18:03:18,843 [INFO] Added job "Nightly Graph Recompute" to job store "default"
-2026-02-15 18:03:18,843 [INFO] Added job "Morning Signal Scan" to job store "default"
-2026-02-15 18:03:18,844 [INFO] Added job "Afternoon Signal Scan" to job store "default"
-2026-02-15 18:03:18,844 [INFO] Added job "Weekly Digest" to job store "default"
-2026-02-15 18:03:18,844 [INFO] Scheduler started
+2026-02-15 20:01:25,169 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 20:01:25,169 [INFO] Scheduled: nightly_recompute at 2:00 AM ET
+2026-02-15 20:01:25,169 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 20:01:25,169 [INFO] Scheduled: morning_briefing at 7:00 AM ET
+2026-02-15 20:01:25,169 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 20:01:25,169 [INFO] Scheduled: morning_signal_scan at 6:00 AM ET
+2026-02-15 20:01:25,169 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 20:01:25,169 [INFO] Scheduled: afternoon_signal_scan at 5:00 PM ET
+2026-02-15 20:01:25,169 [INFO] Adding job tentatively -- it will be properly scheduled when the scheduler starts
+2026-02-15 20:01:25,169 [INFO] Scheduled: weekly_digest at 8:00 AM ET on Sundays
+2026-02-15 20:01:25,169 [INFO] Scheduler started. Press Ctrl+C to exit.
+2026-02-15 20:01:25,170 [INFO] Added job "Nightly Graph Recompute" to job store "default"
+2026-02-15 20:01:25,170 [INFO] Added job "Morning Briefing" to job store "default"
+2026-02-15 20:01:25,170 [INFO] Added job "Morning Signal Scan" to job store "default"
+2026-02-15 20:01:25,170 [INFO] Added job "Afternoon Signal Scan" to job store "default"
+2026-02-15 20:01:25,170 [INFO] Added job "Weekly Digest" to job store "default"
+2026-02-15 20:01:25,170 [INFO] Scheduler started

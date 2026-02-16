@@ -29,6 +29,21 @@ except ImportError:
     HAS_REQUESTS = False
 
 
+def send_instant_alert(company_name: str, signal_type: str, details: str):
+    """Send instant Discord alert for hot signals."""
+    webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "")
+    if not webhook_url or not HAS_REQUESTS:
+        return
+    
+    emoji = "💰" if signal_type == "funding" else "🔥"
+    message = f"{emoji} **Signal Alert: {company_name}**\n{signal_type.title()}: {details}\n*Reply with company name for intro path*"
+    
+    try:
+        requests.post(webhook_url, json={"content": message}, timeout=5)
+    except:
+        pass
+
+
 def get_target_companies(db_path: Optional[str] = None) -> List[Dict]:
     """
     Get companies to scan from database.
@@ -72,16 +87,17 @@ def insert_funding_event(
     conn = sqlite3.connect(db_path)
     cur = conn.cursor()
     
-    # Parse amount to float first
+    # Parse amount to float if string
     amount_float = None
     if amount:
         try:
+            # Remove $, commas, and parse
             cleaned = amount.replace('$', '').replace(',', '').replace(' million', '000000').replace(' billion', '000000000')
             amount_float = float(cleaned)
         except:
             amount_float = None
     
-    # Check for duplicate: same URL OR same company + similar amount within 7 days
+    # Check for duplicate: same source URL OR (same company + similar amount + within 7 days)
     cur.execute("""
         SELECT id FROM funding_events 
         WHERE company_id = ? AND (
@@ -93,7 +109,7 @@ def insert_funding_event(
                 AND event_date >= date('now', '-7 days')
             )
         )
-    """, (company_id, source_url, amount_float, amount_float, amount_float if amount_float else 1))
+    """, (company_id, source_url, amount_float, amount_float, amount_float or 1))
     
     if cur.fetchone():
         conn.close()
@@ -254,6 +270,17 @@ def scan_company(
                     if event_id > 0:
                         summary["funding_found"] += 1
                         summary["total_inserted"] += 1
+                        
+                        # Alert on significant funding (>$50M)
+                        amount = cls.get("details", {}).get("amount")
+                        if amount:
+                            try:
+                                amt_clean = amount.replace('$', '').replace(',', '').replace(' million', '000000').replace(' billion', '000000000')
+                                if float(amt_clean) >= 50000000:
+                                    investor = cls.get("details", {}).get("investor") or "undisclosed"
+                                    send_instant_alert(company_name, "funding", f"{amount} (Lead: {investor})")
+                            except:
+                                pass
                 
                 summary["tokens_used"] += cls.get("_tokens_used", 0)
         
@@ -272,7 +299,7 @@ def scan_company(
                 cls = item.get("classification", {})
                 if cls.get("category") in ("hiring", "expansion") and cls.get("confidence", 0) >= 0.7:
                     # Determine relevance
-                    role = str(cls.get("details", {}).get("role", "") or "").lower()
+                    role = (cls.get("details", {}).get("role") or "").lower()
                     if any(x in role for x in ["real estate", "facilities", "workplace", "office"]):
                         relevance = "high"
                     else:
@@ -290,6 +317,11 @@ def scan_company(
                     if signal_id > 0:
                         summary["hiring_found"] += 1
                         summary["total_inserted"] += 1
+                        
+                        # Alert on high-relevance hiring (RE-related roles)
+                        if relevance == "high":
+                            role = cls.get("details", {}).get("role", "RE-related position")
+                            send_instant_alert(company_name, "hiring", f"High-relevance: {role}")
                 
                 summary["tokens_used"] += cls.get("_tokens_used", 0)
         
