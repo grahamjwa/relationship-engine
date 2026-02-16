@@ -374,60 +374,69 @@ def compute_contact_priority_score(
 # =============================================================================
 
 def identify_high_priority(conn: sqlite3.Connection) -> List[Dict]:
-    """Identify high-priority opportunities."""
+    """Identify high-priority opportunities (deduplicated by company)."""
     cur = conn.cursor()
     results = []
+    seen_companies = set()
     
     # Funding in last 90 days for target companies
     cur.execute("""
-        SELECT DISTINCT c.id, c.name, f.round_type, f.amount, f.event_date
+        SELECT DISTINCT c.id, c.name, f.round_type, MAX(f.amount), MAX(f.event_date)
         FROM companies c
         JOIN funding_events f ON c.id = f.company_id
         WHERE c.status IN ('high_growth_target', 'prospect')
         AND f.event_date >= date('now', '-90 days')
-        ORDER BY f.event_date DESC
+        GROUP BY c.id
+        ORDER BY MAX(f.event_date) DESC
     """)
     for row in cur.fetchall():
-        results.append({
-            'type': 'recent_funding',
-            'company_id': row[0],
-            'company_name': row[1],
-            'detail': f"{row[2]}: ${row[3]:,.0f}" if row[3] else row[2],
-            'date': row[4],
-            'priority': 'high'
-        })
+        if row[0] not in seen_companies:
+            seen_companies.add(row[0])
+            results.append({
+                'type': 'recent_funding',
+                'company_id': row[0],
+                'company_name': row[1],
+                'detail': f"{row[2]}: ${row[3]:,.0f}" if row[3] else row[2],
+                'date': row[4],
+                'priority': 'high'
+            })
     
     # Lease expiry in next 12 months
     cur.execute("""
-        SELECT c.id, c.name, l.lease_expiry, l.square_feet, b.address
+        SELECT c.id, c.name, MIN(l.lease_expiry), SUM(l.square_feet), b.address
         FROM companies c
         JOIN leases l ON c.id = l.company_id
         JOIN buildings b ON l.building_id = b.id
         WHERE c.status IN ('prospect', 'active_client', 'high_growth_target')
         AND l.lease_expiry BETWEEN date('now') AND date('now', '+12 months')
-        ORDER BY l.lease_expiry ASC
+        GROUP BY c.id
+        ORDER BY MIN(l.lease_expiry) ASC
     """)
     for row in cur.fetchall():
-        results.append({
-            'type': 'lease_expiring',
-            'company_id': row[0],
-            'company_name': row[1],
-            'detail': f"{row[3]:,} SF at {row[4]}" if row[3] else row[4],
-            'date': row[2],
-            'priority': 'high'
-        })
+        if row[0] not in seen_companies:
+            seen_companies.add(row[0])
+            results.append({
+                'type': 'lease_expiring',
+                'company_id': row[0],
+                'company_name': row[1],
+                'detail': f"{row[3]:,} SF at {row[4]}" if row[3] else row[4],
+                'date': row[2],
+                'priority': 'high'
+            })
     
     # High-relevance hiring signal in last 30 days
     cur.execute("""
-        SELECT c.id, c.name, h.signal_type, h.details, h.signal_date
+        SELECT c.id, c.name, h.signal_type, h.details, MAX(h.signal_date)
         FROM companies c
         JOIN hiring_signals h ON c.id = h.company_id
         WHERE h.relevance = 'high'
         AND h.signal_date >= date('now', '-30 days')
-        ORDER BY h.signal_date DESC
+        GROUP BY c.id
+        ORDER BY MAX(h.signal_date) DESC
     """)
     for row in cur.fetchall():
-        results.append({
+        if row[0] not in seen_companies:
+            seen_companies.add(row[0])
             'type': 'high_value_hire',
             'company_id': row[0],
             'company_name': row[1],
