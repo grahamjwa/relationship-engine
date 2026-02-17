@@ -15,3 +15,5 @@
 2026-02-15 20:01:25,170 [INFO] Added job "Afternoon Signal Scan" to job store "default"
 2026-02-15 20:01:25,170 [INFO] Added job "Weekly Digest" to job store "default"
 2026-02-15 20:01:25,170 [INFO] Scheduler started
+2026-02-15 23:00:00,126 [INFO] Running job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-16 02:00:00 EST)" (scheduled at 2026-02-16 02:00:00-05:00)
+2026-02-15 23:00:00,328 [INFO] Job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-17 02:00:00 EST)" executed successfully
