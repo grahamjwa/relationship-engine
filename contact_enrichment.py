@@ -5,7 +5,7 @@ from typing import Optional, Dict, List
 from datetime import datetime
 
 sys.path.insert(0, '/sessions/sharp-admiring-curie/relationship_engine')
-from core.graph_engine import get_db_path
+from graph_engine import get_db_path
 
 # Try to import Anthropic for enrichment
 try:

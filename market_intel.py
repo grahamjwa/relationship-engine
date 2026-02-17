@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 
 sys.path.insert(0, '/sessions/sharp-admiring-curie/relationship_engine')
-from core.graph_engine import get_db_path
+from graph_engine import get_db_path
 
 # Try to import search client
 try:

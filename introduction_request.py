@@ -11,7 +11,7 @@ import argparse
 from typing import Optional, Dict, List, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core.graph_engine import get_db_path, build_graph, _node_key, find_shortest_path
+from graph_engine import get_db_path, build_graph, _node_key, find_shortest_path
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

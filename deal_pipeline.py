@@ -12,7 +12,7 @@ from typing import Optional, Dict, List
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from core.graph_engine import get_db_path
+from graph_engine import get_db_path
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
