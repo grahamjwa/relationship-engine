@@ -1,0 +1,219 @@
+"""
+Signal Feed
+Real-time feed of funding events, hiring signals, and lease expirations.
+"""
+
+import os
+import sys
+import sqlite3
+from datetime import datetime, timedelta
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config  # noqa: F401
+
+import streamlit as st
+from graph_engine import get_db_path
+
+st.set_page_config(page_title="Signal Feed", page_icon="📡", layout="wide")
+
+def get_conn():
+    conn = sqlite3.connect(get_db_path())
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+# =============================================================================
+# DATA FETCHERS
+# =============================================================================
+
+def get_funding_events(days_back=90, company_filter=None):
+    conn = get_conn()
+    cur = conn.cursor()
+    query = """
+        SELECT f.id, f.event_date, f.round_type, f.amount, f.lead_investor, f.source_url,
+               c.name as company_name, c.id as company_id, c.status
+        FROM funding_events f
+        JOIN companies c ON f.company_id = c.id
+        WHERE f.event_date >= date('now', ? || ' days')
+    """
+    params = [f"-{days_back}"]
+    if company_filter:
+        query += " AND c.name LIKE ?"
+        params.append(f"%{company_filter}%")
+    query += " ORDER BY f.event_date DESC"
+    cur.execute(query, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_hiring_signals(days_back=90, relevance_filter=None, company_filter=None):
+    conn = get_conn()
+    cur = conn.cursor()
+    query = """
+        SELECT h.id, h.signal_date, h.signal_type, h.details, h.relevance, h.source_url,
+               c.name as company_name, c.id as company_id, c.status
+        FROM hiring_signals h
+        JOIN companies c ON h.company_id = c.id
+        WHERE h.signal_date >= date('now', ? || ' days')
+    """
+    params = [f"-{days_back}"]
+    if relevance_filter and relevance_filter != "All":
+        query += " AND h.relevance = ?"
+        params.append(relevance_filter.lower())
+    if company_filter:
+        query += " AND c.name LIKE ?"
+        params.append(f"%{company_filter}%")
+    query += " ORDER BY h.signal_date DESC"
+    cur.execute(query, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_upcoming_lease_expirations(months_ahead=18, company_filter=None):
+    conn = get_conn()
+    cur = conn.cursor()
+    query = """
+        SELECT l.id, l.lease_expiry, l.square_feet, l.rent_psf,
+               c.name as company_name, c.id as company_id, c.status,
+               b.address, b.submarket
+        FROM leases l
+        JOIN companies c ON l.company_id = c.id
+        LEFT JOIN buildings b ON l.building_id = b.id
+        WHERE l.lease_expiry BETWEEN date('now') AND date('now', ? || ' months')
+    """
+    params = [f"+{months_ahead}"]
+    if company_filter:
+        query += " AND c.name LIKE ?"
+        params.append(f"%{company_filter}%")
+    query += " ORDER BY l.lease_expiry ASC"
+    cur.execute(query, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
+# =============================================================================
+# UI
+# =============================================================================
+
+st.title("Signal Feed")
+
+# Filters
+with st.sidebar:
+    st.subheader("Filters")
+    company_search = st.text_input("Company name", "")
+    days_back = st.slider("Lookback (days)", 7, 365, 90)
+    signal_types = st.multiselect(
+        "Signal types",
+        ["Funding", "Hiring", "Lease Expiry"],
+        default=["Funding", "Hiring", "Lease Expiry"]
+    )
+    relevance = st.selectbox("Hiring relevance", ["All", "High", "Medium", "Low"])
+
+# Summary KPIs
+conn = get_conn()
+cur = conn.cursor()
+
+cur.execute("SELECT COUNT(*) FROM funding_events WHERE event_date >= date('now', '-30 days')")
+funding_30d = cur.fetchone()[0]
+cur.execute("SELECT COUNT(*) FROM hiring_signals WHERE signal_date >= date('now', '-30 days')")
+hiring_30d = cur.fetchone()[0]
+cur.execute("SELECT COUNT(*) FROM leases WHERE lease_expiry BETWEEN date('now') AND date('now', '+12 months')")
+leases_12m = cur.fetchone()[0]
+conn.close()
+
+k1, k2, k3 = st.columns(3)
+k1.metric("Funding (30d)", funding_30d)
+k2.metric("Hiring Signals (30d)", hiring_30d)
+k3.metric("Lease Expirations (12mo)", leases_12m)
+
+st.markdown("---")
+
+# Combined feed (interleaved by date)
+feed_items = []
+
+if "Funding" in signal_types:
+    for f in get_funding_events(days_back, company_search):
+        amount_str = f"${f['amount']:,.0f}" if f["amount"] else "undisclosed"
+        feed_items.append({
+            "date": f["event_date"],
+            "type": "Funding",
+            "icon": "💰",
+            "company": f["company_name"],
+            "company_id": f["company_id"],
+            "headline": f"{f['round_type'] or 'Round'} — {amount_str}",
+            "detail": f"Lead: {f['lead_investor'] or 'undisclosed'}",
+            "status": f["status"],
+            "url": f.get("source_url", ""),
+            "relevance": "high",
+        })
+
+if "Hiring" in signal_types:
+    for h in get_hiring_signals(days_back, relevance, company_search):
+        feed_items.append({
+            "date": h["signal_date"],
+            "type": "Hiring",
+            "icon": "👔",
+            "company": h["company_name"],
+            "company_id": h["company_id"],
+            "headline": h["signal_type"].replace("_", " ").title(),
+            "detail": h["details"] or "",
+            "status": h["status"],
+            "url": h.get("source_url", ""),
+            "relevance": h["relevance"],
+        })
+
+if "Lease Expiry" in signal_types:
+    for l in get_upcoming_lease_expirations(18, company_search):
+        sf_str = f"{l['square_feet']:,.0f} SF" if l["square_feet"] else "unknown SF"
+        addr = l.get("address") or "unknown location"
+        feed_items.append({
+            "date": l["lease_expiry"],
+            "type": "Lease Expiry",
+            "icon": "🏢",
+            "company": l["company_name"],
+            "company_id": l["company_id"],
+            "headline": f"{sf_str} expiring",
+            "detail": f"at {addr}" + (f" ({l['submarket']})" if l.get("submarket") else ""),
+            "status": l["status"],
+            "url": "",
+            "relevance": "high" if l.get("square_feet") and l["square_feet"] > 50000 else "medium",
+        })
+
+# Sort by date descending
+feed_items.sort(key=lambda x: x["date"] or "0000-00-00", reverse=True)
+
+# Render feed
+if not feed_items:
+    st.info("No signals found for the selected filters. Try widening the date range or clearing filters.")
+else:
+    st.subheader(f"Showing {len(feed_items)} signals")
+
+    for item in feed_items[:100]:  # Cap display at 100
+        relevance_color = {"high": "🔴", "medium": "🟡", "low": "⚪"}.get(item["relevance"], "⚪")
+
+        with st.container():
+            cols = st.columns([1, 3, 2, 1])
+
+            with cols[0]:
+                st.markdown(f"**{item['date']}**")
+                st.caption(f"{item['icon']} {item['type']}")
+
+            with cols[1]:
+                st.markdown(f"**{item['company']}** — {item['headline']}")
+                if item["detail"]:
+                    st.caption(item["detail"])
+
+            with cols[2]:
+                st.caption(f"Status: {item['status']} · {relevance_color} {item['relevance']}")
+
+            with cols[3]:
+                if item["url"]:
+                    st.markdown(f"[Source]({item['url']})")
+
+        st.markdown("---")
+
+    if len(feed_items) > 100:
+        st.caption(f"Showing 100 of {len(feed_items)} signals. Narrow your filters to see more.")
