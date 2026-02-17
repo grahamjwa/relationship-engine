@@ -1,0 +1,21 @@
+first_name,last_name,company,title,role_level,email,phone,linkedin_url,alma_mater,previous_companies,notes
+Marcus,Chen,Citadel,Managing Director,c_suite,marcus.chen@citadel.com,212-555-0101,linkedin.com/in/marcus-chen,Harvard,Goldman Sachs,Founder of Citadel's Asia desk
+Sarah,Goldman,Bridgewater,Chief Investment Officer,c_suite,sarah.goldman@bridgewater.com,203-555-0102,linkedin.com/in/sarah-goldman,Yale,McKinsey, 20+ years in hedge fund management
+James,Rivera,Point72,Senior Portfolio Manager,decision_maker,james.rivera@point72.com,212-555-0103,linkedin.com/in/james-rivera,Wharton,Morgan Stanley,Specializes in real estate sector
+Lisa,Patel,Two Sigma,VP Quantitative Research,decision_maker,lisa.patel@twosigma.com,212-555-0104,linkedin.com/in/lisa-patel,MIT,Jane Street,Built quant models for RE investments
+David,Thompson,Millennium,Managing Partner,c_suite,david.thompson@millennium.com,212-555-0105,linkedin.com/in/david-thompson,Columbia,Goldman Sachs,Manages $15B+ portfolio
+Emma,Rodriguez,Ramp,Head of Real Estate,decision_maker,emma.rodriguez@ramp.com,212-555-0106,linkedin.com/in/emma-rodriguez,NYU,Brex,Leading CRE strategy at Ramp
+Alex,Kim,Brex,VP Workplace Strategy,decision_maker,alex.kim@brex.com,212-555-0107,linkedin.com/in/alex-kim,Columbia,Square,Managed portfolio for 3 companies
+Jordan,Lee,Sword Health,Chief Financial Officer,decision_maker,jordan.lee@swordhealth.com,212-555-0108,linkedin.com/in/jordan-lee,Wharton,Ramp,Former finance lead at Ramp
+Casey,Martin,Flexport,VP Corporate Real Estate,decision_maker,casey.martin@flexport.com,212-555-0109,linkedin.com/in/casey-martin,Stanford,Amazon,Managed global RE portfolio
+Taylor,Jackson,Rippling,Director of Facilities,decision_maker,taylor.jackson@rippling.com,212-555-0110,linkedin.com/in/taylor-jackson,Berkeley,Google,Built facilities team from scratch
+Robert,Williams,CBRE,Managing Director,team,robert.williams@cbre.com,212-555-0111,linkedin.com/in/robert-williams,Harvard,JLL,20+ years in CRE brokerage
+Patricia,Brown,CBRE,VP Workplace Solutions,team,patricia.brown@cbre.com,212-555-0112,linkedin.com/in/patricia-brown,Columbia,Savills,Expert in workplace strategy
+Michael,Davis,CBRE,Senior Associate,team,michael.davis@cbre.com,212-555-0113,linkedin.com/in/michael-davis,NYU,Colliers, 5 years in transaction services
+Jennifer,Wilson,CBRE,Director of Leasing,team,jennifer.wilson@cbre.com,212-555-0114,linkedin.com/in/jennifer-wilson,Penn,CBRE,Internal promotion from Associate
+Christopher,Moore,CBRE,Associate Director,team,christopher.moore@cbre.com,212-555-0115,linkedin.com/in/christopher-moore,Cornell,JLL,Recently joined CBRE from JLL
+John,Anderson,JPMorgan,Head of Real Estate,influencer,john.anderson@jpm.com,212-555-0116,linkedin.com/in/john-anderson,Harvard,Morgan Stanley,Oversees $50B+ RE portfolio
+Susan,Taylor,Goldman Sachs,Managing Director Real Estate,decision_maker,susan.taylor@gs.com,212-555-0117,linkedin.com/in/susan-taylor,Wharton,JP Morgan,Leads GS real estate investments
+Charles,Johnson,Deloitte,Principal Real Estate Advisory,decision_maker,charles.johnson@deloitte.com,212-555-0118,linkedin.com/in/charles-johnson,Columbia,McKinsey,Head of CRE consulting practice
+Victoria,Harris,McKinsey,Partner,influencer,victoria.harris@mckinsey.com,212-555-0119,linkedin.com/in/victoria-harris,Yale,Bain,Leads real estate practice
+Daniel,White,Meta,Director of Global Real Estate,decision_maker,daniel.white@meta.com,212-555-0120,linkedin.com/in/daniel-white,MIT,Google,Manages Meta's worldwide RE strategy

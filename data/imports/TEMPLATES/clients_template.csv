@@ -1,0 +1,2 @@
+company_name,status,last_deal_date,last_deal_sf,deal_value,relationship_owner,check_in_frequency
+Example Corp,active_client,2024-06-15,25000,150000,Graham,monthly

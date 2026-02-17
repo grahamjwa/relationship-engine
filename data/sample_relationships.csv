@@ -1,0 +1,31 @@
+contact_a_first,contact_a_last,contact_b_first,contact_b_last,relationship_type,strength,direction,context,notes
+Robert,Williams,John,Anderson,colleague,5,bidirectional,Former colleagues at Goldman Sachs,Both worked in RE for 10+ years
+Patricia,Brown,Susan,Taylor,alumni,4,bidirectional,Columbia MBA 2015,Stayed in touch after business school
+Michael,Davis,Charles,Johnson,former_colleague,3,bidirectional,Both at Colliers before current roles,Collaborated on client deals
+Jennifer,Wilson,Victoria,Harris,introduced_by,2,directional,Introduced by McKinsey partner,Potential Ramp client
+Christopher,Moore,Daniel,White,alumni,3,bidirectional,Cornell undergrad class of 2010,Reconnected at CRE conference
+Marcus,Chen,John,Anderson,colleague,5,bidirectional,Former colleagues at Goldman Sachs,Built hedge fund relationships together
+Sarah,Goldman,Susan,Taylor,alumni,4,bidirectional,Yale MBA 1998,Friends from business school
+James,Rivera,Charles,Johnson,colleague,4,bidirectional,Met at Wharton MBA program,Stay in touch professionally
+Lisa,Patel,Daniel,White,alumni,3,bidirectional,MIT class of 2012,Connected through engineering network
+David,Thompson,Victoria,Harris,former_colleague,3,bidirectional,Both at Goldman Sachs,Victoria was his McKinsey colleague later
+Emma,Rodriguez,Patricia,Brown,colleague,5,bidirectional,Worked together at Brex,Close working relationship
+Alex,Kim,Michael,Davis,introduced_by,3,directional,Patricia introduced them,Potential workplace consulting deal
+Jordan,Lee,John,Anderson,alumni,4,bidirectional,Wharton MBA 2014,Finance track classmates
+Casey,Martin,Susan,Taylor,colleague,4,bidirectional,Worked together at Amazon,Collaborated on real estate portfolio
+Taylor,Jackson,Victoria,Harris,introduced_by,2,directional,Introduced via McKinsey,Consulting opportunity exploration
+Robert,Williams,Emma,Rodriguez,colleague,5,bidirectional,Both transitioned to tech RE,Regularly exchange best practices
+Patricia,Brown,Jordan,Lee,former_colleague,3,bidirectional,Both worked at Ramp,Patricia was Jordan's advisor
+Michael,Davis,Alex,Kim,colleague,4,bidirectional,Columbia MBA 2016,Stayed connected after school
+Jennifer,Wilson,Daniel,White,introduced_by,2,directional,Jennifer introduced via CBRE network,Meta considering new HQ space
+Christopher,Moore,Casey,Martin,alumni,3,bidirectional,Cornell class of 2010,Both interested in workplace trends
+Marcus,Chen,David,Thompson,colleague,5,bidirectional,Worked together at Goldman,Now compete as hedge fund managers
+Sarah,Goldman,Victoria,Harris,colleague,4,bidirectional,Both hedge fund investors,Meet at REBNY events
+James,Rivera,John,Anderson,colleague,4,bidirectional,Both in real estate investing,Discuss portfolio strategies
+Lisa,Patel,Daniel,White,colleague,3,bidirectional,Both tech company real estate leads,Exchange analytical approaches
+Emma,Rodriguez,Robert,Williams,introduced_by,3,directional,Robert facilitated client intro,Ramp considering CBRE partnership
+Alex,Kim,Patricia,Brown,colleague,5,bidirectional,Worked together at Brex,Close collaboration on strategy
+Jordan,Lee,Charles,Johnson,introduced_by,2,directional,Charles introduced via Deloitte network,Sword Health exploring RE advisory
+Casey,Martin,Michael,Davis,friend,3,bidirectional,Met at Stanford/NYU alumni event,Casual industry friends
+Taylor,Jackson,Victoria,Harris,colleague,4,bidirectional,Both building teams at startups,Share organizational best practices
+David,Thompson,James,Rivera,colleague,5,bidirectional,Hedge fund peers,Discuss investment opportunities regularly

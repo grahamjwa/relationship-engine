@@ -1,6 +1,6 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import config
+
 from graph_engine import get_db_path
 
 import csv
