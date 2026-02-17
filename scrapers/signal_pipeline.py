@@ -299,7 +299,7 @@ def scan_company(
                 cls = item.get("classification", {})
                 if cls.get("category") in ("hiring", "expansion") and cls.get("confidence", 0) >= 0.7:
                     # Determine relevance
-                    role = cls.get("details", {}).get("role", "").lower()
+                    role = ((cls.get("details") or {}).get("role") or "").lower()
                     if any(x in role for x in ["real estate", "facilities", "workplace", "office"]):
                         relevance = "high"
                     else:
