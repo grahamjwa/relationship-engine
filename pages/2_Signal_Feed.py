@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config  # noqa: F401
 
 import streamlit as st
-from graph_engine import get_db_path
+from core.graph_engine import get_db_path
 
 st.set_page_config(page_title="Signal Feed", page_icon="📡", layout="wide")
 
@@ -71,6 +71,31 @@ def get_hiring_signals(days_back=90, relevance_filter=None, company_filter=None)
     return rows
 
 
+def get_executive_changes(days_back=90, company_filter=None, priority_filter=None):
+    conn = get_conn()
+    cur = conn.cursor()
+    query = """
+        SELECT ec.id, ec.effective_date, ec.person_name, ec.old_title, ec.new_title,
+               ec.old_company, ec.new_company, ec.change_type, ec.priority,
+               ec.headline, ec.source_url,
+               ec.company_name, ec.company_id
+        FROM executive_changes ec
+        WHERE ec.effective_date >= date('now', ? || ' days')
+    """
+    params = [f"-{days_back}"]
+    if company_filter:
+        query += " AND ec.company_name LIKE ?"
+        params.append(f"%{company_filter}%")
+    if priority_filter and priority_filter != "All":
+        query += " AND ec.priority = ?"
+        params.append(priority_filter.lower())
+    query += " ORDER BY ec.effective_date DESC"
+    cur.execute(query, params)
+    rows = [dict(r) for r in cur.fetchall()]
+    conn.close()
+    return rows
+
+
 def get_upcoming_lease_expirations(months_ahead=18, company_filter=None):
     conn = get_conn()
     cur = conn.cursor()
@@ -107,10 +132,11 @@ with st.sidebar:
     days_back = st.slider("Lookback (days)", 7, 365, 90)
     signal_types = st.multiselect(
         "Signal types",
-        ["Funding", "Hiring", "Lease Expiry"],
-        default=["Funding", "Hiring", "Lease Expiry"]
+        ["Funding", "Hiring", "Executive", "Lease Expiry"],
+        default=["Funding", "Hiring", "Executive", "Lease Expiry"]
     )
     relevance = st.selectbox("Hiring relevance", ["All", "High", "Medium", "Low"])
+    exec_priority = st.selectbox("Executive priority", ["All", "High", "Medium", "Low"])
 
 # Summary KPIs
 conn = get_conn()
@@ -122,12 +148,18 @@ cur.execute("SELECT COUNT(*) FROM hiring_signals WHERE signal_date >= date('now'
 hiring_30d = cur.fetchone()[0]
 cur.execute("SELECT COUNT(*) FROM leases WHERE lease_expiry BETWEEN date('now') AND date('now', '+12 months')")
 leases_12m = cur.fetchone()[0]
+try:
+    cur.execute("SELECT COUNT(*) FROM executive_changes WHERE effective_date >= date('now', '-30 days')")
+    exec_30d = cur.fetchone()[0]
+except Exception:
+    exec_30d = 0
 conn.close()
 
-k1, k2, k3 = st.columns(3)
+k1, k2, k3, k4 = st.columns(4)
 k1.metric("Funding (30d)", funding_30d)
 k2.metric("Hiring Signals (30d)", hiring_30d)
-k3.metric("Lease Expirations (12mo)", leases_12m)
+k3.metric("Exec Changes (30d)", exec_30d)
+k4.metric("Lease Expirations (12mo)", leases_12m)
 
 st.markdown("---")
 
@@ -163,6 +195,24 @@ if "Hiring" in signal_types:
             "status": h["status"],
             "url": h.get("source_url", ""),
             "relevance": h["relevance"],
+        })
+
+if "Executive" in signal_types:
+    for ec in get_executive_changes(days_back, company_search, exec_priority):
+        from_part = f" from {ec['old_company']}" if ec.get('old_company') else ""
+        re_flag = ec.get('change_type', '') in ('new_re_head', 'new_facilities')
+        icon = "🧑‍💼" if re_flag else "👔"
+        feed_items.append({
+            "date": ec.get("effective_date") or "unknown",
+            "type": "Executive",
+            "icon": icon,
+            "company": ec["company_name"],
+            "company_id": ec.get("company_id"),
+            "headline": f"{ec['person_name']} → {ec.get('new_title', '?')}{from_part}",
+            "detail": ec.get("headline") or "",
+            "status": ec.get("change_type", "").replace("_", " "),
+            "url": ec.get("source_url", ""),
+            "relevance": ec.get("priority", "medium"),
         })
 
 if "Lease Expiry" in signal_types:

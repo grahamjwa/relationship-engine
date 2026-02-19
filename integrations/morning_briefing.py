@@ -13,6 +13,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config  # noqa: F401
 
 from core.graph_engine import get_db_path
+from core.agency_engine import get_agency_briefing_data
+from scrapers.executive_scanner import get_executive_briefing_data
+from import_all import list_pending_imports, IMPORT_DIR
 
 try:
     import requests
@@ -171,6 +174,22 @@ def get_briefing_data(db_path=None):
     data['lease_predictions'] = [dict(row) for row in cur.fetchall()]
 
     conn.close()
+
+    # Pending imports
+    data['pending_imports'] = list_pending_imports()
+
+    # Agency briefing data
+    try:
+        data['agency'] = get_agency_briefing_data(db_path)
+    except Exception:
+        data['agency'] = {}
+
+    # Executive changes
+    try:
+        data['executives'] = get_executive_briefing_data(db_path)
+    except Exception:
+        data['executives'] = {}
+
     return data
 
 
@@ -241,6 +260,68 @@ def format_briefing(data):
         lines.append("**🔮 Lease Probability (>50%):**")
         for lp in data['lease_predictions']:
             lines.append(f"  • {lp['name']}: {lp['prob']}% likely to lease")
+        lines.append("")
+
+    # Pending imports
+    if data.get('pending_imports'):
+        lines.append("**📥 Data Ready to Import:**")
+        for f in data['pending_imports']:
+            lines.append(f"  • {f}")
+        lines.append(f"  Run `python import_all.py` to process.")
+        lines.append("")
+
+    # Executive changes (24h)
+    execs = data.get('executives', {})
+    if execs.get('high_priority_changes'):
+        lines.append("**🔔 Executive Changes (24h):**")
+        for ec in execs['high_priority_changes']:
+            from_part = f" (from {ec['old_company']})" if ec.get('old_company') else ""
+            lines.append(f"  • 🔴 {ec['person_name']} → {ec.get('new_title', '?')} "
+                         f"at {ec['company_name']}{from_part}")
+        if execs.get('medium_count', 0) > 0:
+            lines.append(f"  • + {execs['medium_count']} medium-priority changes")
+        lines.append("")
+    elif execs.get('total_24h', 0) > 0:
+        lines.append(f"**🔔 Executive Changes:** {execs['total_24h']} changes in last 24h (no high-priority)")
+        lines.append("")
+
+    # Agency: Tasks due today
+    agency = data.get('agency', {})
+    if agency.get('tasks_due'):
+        lines.append("**🏢 Agency Tasks Due:**")
+        for t in agency['tasks_due'][:5]:
+            bldg = t.get('building_name') or ''
+            tenant = t.get('tenant_or_company') or ''
+            prefix = f"[{bldg}] " if bldg else ""
+            label = f"**{tenant}**: " if tenant else ""
+            priority_badge = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(
+                t.get('priority', ''), "")
+            lines.append(f"  • {priority_badge} {prefix}{label}{t['task_text']}")
+        lines.append("")
+
+    # Agency: Expiring tenants
+    if agency.get('expiring_soon'):
+        lines.append("**⏰ Leases Expiring Soon:**")
+        for t in agency['expiring_soon']:
+            bldg = t.get('building_name') or ''
+            lines.append(f"  • {t['tenant_name']} at {bldg} — expires {t['lease_expiry']}")
+        lines.append("")
+
+    # Agency: New market matches
+    if agency.get('new_market_matches', 0) > 0:
+        lines.append(f"**🎯 Market Matches: {agency['new_market_matches']} requirement(s) match your buildings**")
+        for bname, info in agency.get('match_details', {}).items():
+            for m in info['matches'][:3]:
+                floors = ", ".join(f"Fl {f['floor']}" for f in m['matched_floors'][:3])
+                lines.append(f"  • {m['company']} ({m['sf_min']:,}-{m['sf_max']:,} SF) → {bname}: {floors}")
+        lines.append("")
+
+    # Agency: Recent activity
+    if agency.get('recent_activity'):
+        lines.append("**📊 Agency Activity (7d):**")
+        for a in agency['recent_activity'][:5]:
+            bldg = a.get('building_name') or ''
+            lines.append(f"  • {a['activity_date']} | {a['activity_type']} | {a.get('company_name', '')} at {bldg}")
         lines.append("")
 
     # Weekly stats

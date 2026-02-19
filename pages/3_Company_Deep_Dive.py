@@ -12,8 +12,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config  # noqa: F401
 
 import streamlit as st
-from graph_engine import get_db_path, build_graph, find_shortest_path
-from path_finder import find_warm_intros
+from core.graph_engine import get_db_path, build_graph, find_shortest_path
+from core.path_finder import find_warm_intros
+from scrapers.executive_scanner import get_executives, get_recent_changes, classify_title
 
 st.set_page_config(page_title="Company Deep Dive", page_icon="🔍", layout="wide")
 
@@ -103,6 +104,28 @@ def get_company_detail(company_id):
     """, (company_id,))
     leases = [dict(r) for r in cur.fetchall()]
 
+    # Executives
+    cur.execute("""
+        SELECT person_name, title, title_category, priority, start_date,
+               previous_company, previous_title, linkedin_url, last_verified
+        FROM executives WHERE company_id = ?
+        ORDER BY
+            CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+            title_category ASC
+    """, (company_id,))
+    executives = [dict(r) for r in cur.fetchall()]
+
+    # Executive changes (last 90 days)
+    cur.execute("""
+        SELECT person_name, old_title, new_title, old_company, new_company,
+               change_type, priority, effective_date, source_url, headline
+        FROM executive_changes WHERE company_id = ?
+        AND created_at >= datetime('now', '-90 days')
+        ORDER BY effective_date DESC
+        LIMIT 10
+    """, (company_id,))
+    exec_changes = [dict(r) for r in cur.fetchall()]
+
     conn.close()
 
     return {
@@ -113,6 +136,8 @@ def get_company_detail(company_id):
         "hiring": hiring,
         "deals": deals,
         "leases": leases,
+        "executives": executives,
+        "exec_changes": exec_changes,
     }
 
 
@@ -211,6 +236,39 @@ if selected:
                     st.caption(f"Our role: {role}")
         else:
             st.caption("No deals recorded.")
+
+        # Executives
+        st.subheader("Executives")
+        if data["executives"]:
+            import pandas as pd
+            exec_rows = []
+            for ex in data["executives"]:
+                pri_icon = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(ex["priority"], "")
+                linkedin = f"[link]({ex['linkedin_url']})" if ex.get("linkedin_url") else ""
+                exec_rows.append({
+                    "": pri_icon,
+                    "Name": ex["person_name"],
+                    "Title": ex["title"],
+                    "Since": ex.get("start_date") or "—",
+                    "Previous": ex.get("previous_company") or "—",
+                    "LinkedIn": linkedin,
+                })
+            st.dataframe(exec_rows, use_container_width=True, hide_index=True)
+        else:
+            st.caption("No executives tracked yet.")
+
+        if data["exec_changes"]:
+            st.markdown("**Recent Changes (90d):**")
+            for ec in data["exec_changes"]:
+                badge = {"high": "🔴", "medium": "🟡", "low": "🟢"}.get(ec["priority"], "")
+                from_part = f" from {ec['old_company']}" if ec.get("old_company") else ""
+                st.markdown(f"{badge} **{ec['person_name']}** → {ec.get('new_title', '?')}{from_part}")
+                if ec.get("headline"):
+                    st.caption(ec["headline"][:120])
+                if ec.get("effective_date"):
+                    st.caption(f"Date: {ec['effective_date']}")
+
+        st.markdown("")
 
     with right:
         # Contacts

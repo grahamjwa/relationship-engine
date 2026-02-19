@@ -300,3 +300,10 @@ sqlite3.OperationalError: unable to open database file
 2026-02-18 14:00:00,405 [INFO] Starting afternoon signal scan...
 2026-02-18 14:00:00,412 [ERROR] Afternoon scan failed: unable to open database file
 2026-02-18 14:00:00,413 [INFO] Job "Afternoon Signal Scan (trigger: cron[hour='17', minute='0'], next run at: 2026-02-19 17:00:00 EST)" executed successfully
+2026-02-18 23:00:00,364 [INFO] Running job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-20 02:00:00 EST)" (scheduled at 2026-02-19 02:00:00-05:00)
+Traceback (most recent call last):
+  File "/Users/brazosdedios/relationship_engine/nightly_recompute.py", line 219, in run_nightly
+  File "/Users/brazosdedios/relationship_engine/graph_engine.py", line 319, in compute_all
+  File "/Users/brazosdedios/relationship_engine/graph_engine.py", line 44, in build_graph
+sqlite3.OperationalError: unable to open database file
+2026-02-18 23:00:00,374 [INFO] Job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-20 02:00:00 EST)" executed successfully
