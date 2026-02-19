@@ -37,7 +37,7 @@ def get_all_tenants(building_filter=None, lxd_year=None, sf_min=None, sf_max=Non
         conditions.append("b.name = ?")
         params.append(building_filter)
     if lxd_year:
-        conditions.append("t.lease_expiry_date LIKE ?")
+        conditions.append("t.lease_expiry LIKE ?")
         params.append(f"{lxd_year}%")
     if sf_min:
         conditions.append("t.occupied_sf >= ?")
@@ -48,13 +48,13 @@ def get_all_tenants(building_filter=None, lxd_year=None, sf_min=None, sf_max=Non
 
     where = " AND ".join(conditions)
 
-    order = "t.lease_expiry_date ASC"
+    order = "t.lease_expiry ASC"
     if sort_by == 'sf_desc':
         order = "t.occupied_sf DESC"
     elif sort_by == 'sf_asc':
         order = "t.occupied_sf ASC"
     elif sort_by == 'lxd_desc':
-        order = "t.lease_expiry_date DESC"
+        order = "t.lease_expiry DESC"
 
     cur.execute(f"""
         SELECT t.*, b.name as building_name, b.address as building_address
@@ -124,7 +124,7 @@ k2.metric("Total RSF", f"{total_sf:,}")
 within_6mo = 0
 within_18mo = 0
 for t in tenants:
-    lxd = t.get('lease_expiry_date')
+    lxd = t.get('lease_expiry')
     if lxd:
         try:
             exp_date = datetime.strptime(lxd[:10], '%Y-%m-%d').date()
@@ -144,7 +144,7 @@ st.markdown("---")
 # Table
 if tenants:
     for t in tenants:
-        lxd = t.get('lease_expiry_date', '')
+        lxd = t.get('lease_expiry', '')
         lxd_display = lxd[:10] if lxd else "Unknown"
 
         # Color code
@@ -213,7 +213,7 @@ if tenants:
                 t.get('occupied_sf', ''),
                 t.get('previous_broker', ''),
                 t.get('previous_broker_firm', ''),
-                t.get('lease_expiry_date', '')[:10] if t.get('lease_expiry_date') else '',
+                t.get('lease_expiry', '')[:10] if t.get('lease_expiry') else '',
                 t.get('status', ''),
             ])
         csv_data = output.getvalue()
