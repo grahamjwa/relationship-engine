@@ -56,6 +56,80 @@ h2.metric("Upcoming", summary['upcoming'])
 h3.metric("Completed", summary['completed'])
 h4.metric("Pending Imports", len(pending_imports))
 
+# =============================================================================
+# THIS WEEK'S FOLLOW-UPS (top of page)
+# =============================================================================
+
+st.subheader("📅 This Week's Follow-ups")
+
+conn_fw = get_conn()
+cur_fw = conn_fw.cursor()
+
+# Outreach follow-ups (next 7 days + overdue)
+cur_fw.execute("""
+    SELECT o.id, o.follow_up_date, c.name as company, o.outreach_type,
+           o.notes, 'outreach' as source
+    FROM outreach_log o
+    LEFT JOIN companies c ON o.target_company_id = c.id
+    WHERE o.follow_up_done = 0 AND o.follow_up_date IS NOT NULL
+    AND o.follow_up_date <= date('now', '+7 days')
+    ORDER BY o.follow_up_date ASC
+""")
+week_items = [dict(r) for r in cur_fw.fetchall()]
+
+# SPOC check-ins due
+try:
+    cur_fw.execute("""
+        SELECT id, name as company, spoc_follow_up_date as follow_up_date,
+               spoc_broker as notes, 'spoc' as source
+        FROM companies
+        WHERE spoc_follow_up_date IS NOT NULL
+        AND spoc_follow_up_date <= date('now', '+7 days')
+        AND spoc_status IS NOT NULL
+    """)
+    week_items.extend([dict(r) for r in cur_fw.fetchall()])
+except Exception:
+    pass
+
+# Agency tasks due
+try:
+    cur_fw.execute("""
+        SELECT t.id, t.due_date as follow_up_date, t.tenant_or_company as company,
+               t.task_text as notes, 'agency' as source
+        FROM agency_tasks t
+        WHERE t.status != 'done' AND t.due_date IS NOT NULL
+        AND t.due_date <= date('now', '+7 days')
+    """)
+    week_items.extend([dict(r) for r in cur_fw.fetchall()])
+except Exception:
+    pass
+
+conn_fw.close()
+week_items.sort(key=lambda x: x.get('follow_up_date', '9999'))
+
+if week_items:
+    for wi in week_items[:15]:
+        today_str = datetime.now().strftime('%Y-%m-%d')
+        is_overdue = (wi.get('follow_up_date') or '9999') < today_str
+        badge = "🔴" if is_overdue else "🟡"
+        src_icon = {"outreach": "📋", "spoc": "🔒", "agency": "🏢"}.get(wi['source'], "📌")
+        wi_cols = st.columns([1, 3, 1, 1])
+        with wi_cols[0]:
+            st.markdown(f"{badge} {wi.get('follow_up_date', '?')}")
+        with wi_cols[1]:
+            st.markdown(f"{src_icon} **{wi.get('company', '?')}**"
+                        + (f" — {wi.get('notes', '')[:60]}" if wi.get('notes') else ""))
+        with wi_cols[2]:
+            if wi['source'] == 'outreach' and st.button("✅", key=f"wk_done_{wi['id']}"):
+                mark_followup_done(wi['id'])
+                st.rerun()
+        with wi_cols[3]:
+            if wi['source'] == 'outreach' and st.button("+7d", key=f"wk_7d_{wi['id']}"):
+                mark_followup_done(wi['id'], reschedule_days=7)
+                st.rerun()
+else:
+    st.success("No follow-ups due this week.")
+
 st.markdown("---")
 
 # =============================================================================

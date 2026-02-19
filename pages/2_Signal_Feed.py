@@ -216,20 +216,47 @@ if "Executive" in signal_types:
         })
 
 if "Lease Expiry" in signal_types:
-    for l in get_upcoming_lease_expirations(18, company_search):
-        sf_str = f"{l['square_feet']:,.0f} SF" if l["square_feet"] else "unknown SF"
+    # Size-based thresholds: <15K=18mo, 15-100K=30mo, >100K=48mo
+    for l in get_upcoming_lease_expirations(48, company_search):
+        sf = l.get("square_feet") or 0
+        if sf < 15000:
+            max_months = 18
+        elif sf <= 100000:
+            max_months = 30
+        else:
+            max_months = 48
+        # Check if within window
+        try:
+            from datetime import datetime as _dt
+            exp = _dt.strptime(l["lease_expiry"], "%Y-%m-%d")
+            months_until = (exp.year - _dt.now().year) * 12 + (exp.month - _dt.now().month)
+            if months_until > max_months:
+                continue  # Outside window for this size
+        except Exception:
+            pass
+
+        sf_str = f"{sf:,.0f} SF" if sf else "unknown SF"
         addr = l.get("address") or "unknown location"
+        # Priority: overdue/critical = high, flagged = medium
+        if sf > 100000:
+            rel = "high"
+        elif sf > 50000:
+            rel = "high"
+        elif months_until <= 12:
+            rel = "high"
+        else:
+            rel = "medium"
         feed_items.append({
             "date": l["lease_expiry"],
             "type": "Lease Expiry",
             "icon": "🏢",
             "company": l["company_name"],
             "company_id": l["company_id"],
-            "headline": f"{sf_str} expiring",
+            "headline": f"{sf_str} expiring ({months_until}mo)",
             "detail": f"at {addr}" + (f" ({l['submarket']})" if l.get("submarket") else ""),
             "status": l["status"],
             "url": "",
-            "relevance": "high" if l.get("square_feet") and l["square_feet"] > 50000 else "medium",
+            "relevance": rel,
         })
 
 # Sort by date descending

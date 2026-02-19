@@ -165,12 +165,64 @@ if selected:
     # Header
     st.markdown("---")
 
-    h1, h2, h3, h4, h5 = st.columns(5)
+    h1, h2, h3, h4, h5, h6 = st.columns(6)
     h1.metric("Status", co.get("status", "—").replace("_", " ").title())
     h2.metric("Opportunity Score", f"{co.get('opportunity_score', 0) or 0:.1f}")
     h3.metric("Contacts", len(data["contacts"]))
     h4.metric("Outreach Events", len(data["outreach"]))
     h5.metric("Active Deals", sum(1 for d in data["deals"] if d["status"] not in ("lost", "dead", "closed", None)))
+
+    # SPOC status display
+    spoc_display = (co.get("spoc_status") or "available").replace("_", " ").title()
+    spoc_icon = {"spoced": "🔒", "available": "✅"}.get(co.get("spoc_status", ""), "🟡")
+    h6.metric("SPOC", f"{spoc_icon} {spoc_display}")
+
+    # SPOC management
+    with st.expander("SPOC / Competition Status"):
+        spoc_options = ["available", "spoced", "follow_up_1mo", "follow_up_6mo", "follow_up_1yr"]
+        current_spoc = co.get("spoc_status") or "available"
+        current_idx = spoc_options.index(current_spoc) if current_spoc in spoc_options else 0
+
+        new_spoc = st.selectbox(
+            "SPOC Status", spoc_options,
+            index=current_idx,
+            format_func=lambda x: {
+                "available": "Available",
+                "spoced": "SPOCed (locked out)",
+                "follow_up_1mo": "Follow up in 1 month",
+                "follow_up_6mo": "Follow up in 6 months",
+                "follow_up_1yr": "Follow up in 1 year",
+            }.get(x, x),
+            key="spoc_status_dd"
+        )
+        broker_name = st.text_input("Broker Name", value=co.get("spoc_broker") or "",
+                                     key="spoc_broker_input")
+
+        if st.button("Update SPOC Status", key="spoc_update_btn"):
+            sconn = get_conn()
+            scur = sconn.cursor()
+            from datetime import timedelta
+            fu_date = None
+            if new_spoc == "follow_up_1mo":
+                fu_date = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
+            elif new_spoc == "follow_up_6mo":
+                fu_date = (datetime.now() + timedelta(days=180)).strftime('%Y-%m-%d')
+            elif new_spoc == "follow_up_1yr":
+                fu_date = (datetime.now() + timedelta(days=365)).strftime('%Y-%m-%d')
+            elif new_spoc == "spoced":
+                fu_date = (datetime.now() + timedelta(days=365)).strftime('%Y-%m-%d')
+
+            scur.execute("""
+                UPDATE companies SET spoc_status = ?, spoc_broker = ?,
+                spoc_follow_up_date = ?, spoc_updated_at = datetime('now')
+                WHERE id = ?
+            """, (new_spoc if new_spoc != "available" else None,
+                  broker_name or None, fu_date, company_id))
+            sconn.commit()
+            sconn.close()
+            st.success(f"SPOC updated to {new_spoc}" +
+                       (f" — follow up {fu_date}" if fu_date else ""))
+            st.rerun()
 
     st.markdown("---")
 
