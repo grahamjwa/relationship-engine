@@ -14,7 +14,7 @@ import config  # noqa: F401
 
 import streamlit as st
 from graph_engine import get_db_path
-from market_notes import add_note, search_notes, get_recent_intel
+from core.market_notes import add_note, search_notes, get_recent_intel
 
 st.set_page_config(page_title="Market Notes", page_icon="📝", layout="wide")
 
@@ -118,7 +118,7 @@ if has_filter:
                 company=search_company if search_company else None,
                 building=search_building if search_building else None,
                 tag=tag,
-                days_back=search_days[1],
+                days=search_days[1],
             )
             all_results.extend(results)
         # Deduplicate by id
@@ -133,11 +133,11 @@ if has_filter:
             query=search_query if search_query else None,
             company=search_company if search_company else None,
             building=search_building if search_building else None,
-            days_back=search_days[1],
+            days=search_days[1],
         )
 else:
     # Default: show recent notes
-    results = get_recent_intel(days_back=30)
+    results = get_recent_intel(days=30)
 
 
 # =============================================================================

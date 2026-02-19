@@ -47,7 +47,7 @@ def get_pipeline_data():
             c.id,
             c.name,
             c.status,
-            c.industry,
+            c.sector,
             COALESCE(c.opportunity_score, 0) as opp_score,
             latest_outreach.outreach_date as last_outreach_date,
             latest_outreach.outcome as last_outcome,
@@ -137,7 +137,7 @@ for col, (stage_name, companies) in zip(cols, pipeline.items()):
     filtered = [
         c for c in companies
         if c["opp_score"] >= min_score
-        and (not industry_filter or (c["industry"] and industry_filter.lower() in c["industry"].lower()))
+        and (not industry_filter or (c["sector"] and industry_filter.lower() in c["sector"].lower()))
     ]
     icon = stage_colors.get(stage_name, "⬜")
     col.metric(f"{icon} {stage_name}", len(filtered))
@@ -151,7 +151,7 @@ for col, (stage_name, companies) in zip(cols, pipeline.items()):
     filtered = [
         c for c in companies
         if c["opp_score"] >= min_score
-        and (not industry_filter or (c["industry"] and industry_filter.lower() in c["industry"].lower()))
+        and (not industry_filter or (c["sector"] and industry_filter.lower() in c["sector"].lower()))
     ]
 
     with col:
@@ -166,8 +166,8 @@ for col, (stage_name, companies) in zip(cols, pipeline.items()):
                 detail_parts = []
                 if company["opp_score"] > 0:
                     detail_parts.append(f"Score: {company['opp_score']:.0f}")
-                if company["industry"]:
-                    detail_parts.append(company["industry"])
+                if company["sector"]:
+                    detail_parts.append(company["sector"])
                 if company["last_outreach_date"]:
                     detail_parts.append(f"Last: {company['last_outreach_date']}")
                 if company["deal_sf"]:

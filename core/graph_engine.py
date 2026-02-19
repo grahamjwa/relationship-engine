@@ -211,46 +211,29 @@ def build_graph(db_path: str = DB_PATH) -> DiGraph:
                    title=row["title"], company_id=row["company_id"],
                    status=row["status"])
 
-    cur.execute("""SELECT id, name, industry, status,
-                          COALESCE(category, '') as category,
-                          COALESCE(mature, 0) as mature,
-                          COALESCE(revenue_est, 0) as revenue_est,
-                          COALESCE(office_sf, 0) as office_sf,
-                          COALESCE(cash_reserves, 0) as cash_reserves,
-                          cash_updated_at
+    cur.execute("""SELECT id, name, sector, status,
+                          COALESCE(category, '') as category
                    FROM companies""")
     for row in cur.fetchall():
         key = _node_key("company", row["id"])
-        category, mature = _categorize_company(row)
+        category = row["category"] or "other"
         G.add_node(key, entity_type="company", entity_id=row["id"],
-                   name=row["name"], industry=row["industry"],
+                   name=row["name"], sector=row["sector"],
                    status=row["status"],
-                   category=category, mature=mature,
-                   revenue_est=row["revenue_est"],
-                   office_sf=row["office_sf"],
-                   cash_reserves=row["cash_reserves"],
-                   cash_updated_at=row["cash_updated_at"])
+                   category=category)
 
     cur.execute("""
-        SELECT source_type, source_id, target_type, target_id,
-               relationship_type, strength, confidence, base_weight, last_interaction
+        SELECT contact_id_a, contact_id_b, relationship_type, strength
         FROM relationships
     """)
     for row in cur.fetchall():
-        src = _node_key(row["source_type"], row["source_id"])
-        tgt = _node_key(row["target_type"], row["target_id"])
+        src = _node_key("contact", row["contact_id_a"])
+        tgt = _node_key("contact", row["contact_id_b"])
         rel_type = row["relationship_type"]
-        weight = _compute_edge_weight(
-            row["base_weight"], row["strength"],
-            row["confidence"], row["last_interaction"],
-            relationship_type=rel_type
-        )
+        weight = row["strength"] or 1
         G.add_edge(src, tgt, weight=weight,
                    relationship_type=rel_type,
-                   layer=_get_edge_layer(rel_type),
-                   strength=row["strength"],
-                   confidence=row["confidence"],
-                   last_interaction=row["last_interaction"])
+                   strength=row["strength"] or 1)
 
     conn.close()
     return G
