@@ -1,360 +1,333 @@
 """
-Action Dashboard for Relationship Engine
-Interactive, action-oriented interface for daily BD work.
+Unified Action Dashboard — Streamlit app with tabbed interface.
+
+Run: streamlit run action_dashboard.py
+
+Tabs:
+  1. Opportunities — ranked signal-driven targets
+  2. Follow-ups Due — outreach reminders from outreach_manager
+  3. Import Data — CSV upload and validation
+  4. Data Quality — missing fields, duplicates, health metrics
 """
 
 import os
 import sys
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import config  # noqa: F401
 
-try:
-    import streamlit as st
-    HAS_STREAMLIT = True
-except ImportError:
-    HAS_STREAMLIT = False
+import streamlit as st
+from core.graph_engine import get_db_path
+from core.opportunity_engine import (find_new_opportunities, infer_opportunities,
+                                     get_outreach_gaps)
+from core.outreach_manager import (log_outreach, get_due_followups,
+                                   mark_followup_done, get_followup_summary,
+                                   get_outreach_history)
+from core.signals import SIGNAL_TYPES
+from importers.validate_csv import validate_csv, REQUIRED_COLUMNS
+from import_all import IMPORT_DIR, run_all_imports, list_pending_imports
 
-from graph_engine import get_db_path, find_shortest_path, build_graph
+st.set_page_config(page_title="Relationship Engine", page_icon="🏢", layout="wide")
 
-# Page config
-st.set_page_config(page_title="RE Action Center", layout="wide", initial_sidebar_state="collapsed")
+DB_PATH = get_db_path()
+os.makedirs(IMPORT_DIR, exist_ok=True)
+
 
 def get_conn():
-    conn = sqlite3.connect(get_db_path())
+    conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
-def log_outreach(company_id, contact_id, outreach_type, outcome, notes):
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        INSERT INTO outreach_log (target_company_id, target_contact_id, outreach_date, outreach_type, outcome, notes)
-        VALUES (?, ?, date('now'), ?, ?, ?)
-    """, (company_id, contact_id, outreach_type, outcome, notes))
-    conn.commit()
-    conn.close()
 
-def get_todays_priorities():
-    conn = get_conn()
-    cur = conn.cursor()
-    
-    priorities = []
-    
-    # Recently funded, not contacted
-    cur.execute("""
-        SELECT c.id, c.name, 'Funded' as reason, f.round_type || ' - $' || COALESCE(CAST(f.amount as TEXT), '?') as detail
-        FROM companies c
-        JOIN funding_events f ON c.id = f.company_id
-        WHERE f.event_date >= date('now', '-14 days')
-        AND c.spoc_covered = 0
-        AND NOT EXISTS (SELECT 1 FROM outreach_log o WHERE o.target_company_id = c.id AND o.outreach_date >= f.event_date)
-        ORDER BY f.amount DESC LIMIT 5
-    """)
-    for row in cur.fetchall():
-        priorities.append(dict(row))
-    
-    # High hiring activity, not contacted in 30 days
-    cur.execute("""
-        SELECT c.id, c.name, 'Hiring Spike' as reason, COUNT(h.id) || ' signals' as detail
-        FROM companies c
-        JOIN hiring_signals h ON c.id = h.company_id
-        WHERE h.signal_date >= date('now', '-14 days')
-        AND h.relevance IN ('high', 'medium')
-        AND c.spoc_covered = 0
-        AND NOT EXISTS (SELECT 1 FROM outreach_log o WHERE o.target_company_id = c.id AND o.outreach_date >= date('now', '-30 days'))
-        GROUP BY c.id
-        HAVING COUNT(h.id) >= 2
-        ORDER BY COUNT(h.id) DESC LIMIT 5
-    """)
-    for row in cur.fetchall():
-        priorities.append(dict(row))
-    
-    # Top opportunity score, never contacted
-    cur.execute("""
-        SELECT c.id, c.name, 'High Score' as reason, 'Score: ' || CAST(ROUND(c.opportunity_score) as TEXT) as detail
-        FROM companies c
-        WHERE c.opportunity_score > 30
-        AND c.spoc_covered = 0
-        AND c.status IN ('high_growth_target', 'prospect')
-        AND NOT EXISTS (SELECT 1 FROM outreach_log o WHERE o.target_company_id = c.id)
-        ORDER BY c.opportunity_score DESC LIMIT 5
-    """)
-    for row in cur.fetchall():
-        priorities.append(dict(row))
-    
-    conn.close()
-    return priorities
+# =============================================================================
+# HEADER
+# =============================================================================
 
-def get_follow_ups_due():
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT o.id, c.name as company, o.follow_up_date, o.notes, o.outreach_type
-        FROM outreach_log o
-        JOIN companies c ON o.target_company_id = c.id
-        WHERE o.follow_up_date <= date('now', '+3 days')
-        AND o.follow_up_done = 0
-        ORDER BY o.follow_up_date ASC
-    """)
-    results = [dict(row) for row in cur.fetchall()]
-    conn.close()
-    return results
+st.title("🏢 Relationship Engine — Action Dashboard")
 
-def get_warm_paths(target_company_id):
-    """Find paths from team to target company contacts."""
-    conn = get_conn()
-    cur = conn.cursor()
-    
-    # Get target company contacts
-    cur.execute("""
-        SELECT id, first_name || ' ' || last_name as name, title
-        FROM contacts WHERE company_id = ?
-    """, (target_company_id,))
-    target_contacts = [dict(row) for row in cur.fetchall()]
-    
-    # Get team contacts
-    cur.execute("""
-        SELECT id, first_name || ' ' || last_name as name
-        FROM contacts WHERE role_level = 'team'
-    """)
-    team = [dict(row) for row in cur.fetchall()]
-    
-    # Check for former employee connections
-    cur.execute("""
-        SELECT c.first_name || ' ' || c.last_name as name, c.title, c.previous_companies, comp.name as current_company
-        FROM contacts c
-        JOIN companies comp ON c.company_id = comp.id
-        WHERE comp.id = ?
-        AND c.previous_companies IS NOT NULL
-    """, (target_company_id,))
-    former_employees = [dict(row) for row in cur.fetchall()]
-    
-    conn.close()
-    
-    # Build graph and find paths
-    graph = build_graph()
-    paths = []
-    
-    for tc in target_contacts:
-        for tm in team:
-            path, weight = find_shortest_path(graph, f"contact_{tm['id']}", f"contact_{tc['id']}")
-            if path and len(path) <= 4:
-                paths.append({
-                    'from': tm['name'],
-                    'to': tc['name'],
-                    'to_title': tc.get('title', ''),
-                    'hops': len(path) - 1,
-                    'path': path
-                })
-    
-    return paths, former_employees
+summary = get_followup_summary()
+pending_imports = list_pending_imports()
 
-def get_executive_moves():
-    """Find contacts at targets who came from clients."""
-    conn = get_conn()
-    cur = conn.cursor()
-    cur.execute("""
-        SELECT 
-            c.first_name || ' ' || c.last_name as name,
-            c.title,
-            comp.name as current_company,
-            c.previous_companies,
-            client.name as from_client
-        FROM contacts c
-        JOIN companies comp ON c.company_id = comp.id
-        JOIN companies client ON c.previous_companies LIKE '%' || client.name || '%'
-        WHERE comp.status IN ('high_growth_target', 'prospect')
-        AND client.status = 'active_client'
-    """)
-    results = [dict(row) for row in cur.fetchall()]
-    conn.close()
-    return results
+h1, h2, h3, h4 = st.columns(4)
+h1.metric("Follow-ups Due", summary['due'])
+h2.metric("Upcoming", summary['upcoming'])
+h3.metric("Completed", summary['completed'])
+h4.metric("Pending Imports", len(pending_imports))
 
-def main():
-    st.title("🎯 Action Center")
-    st.caption(f"Today: {datetime.now().strftime('%A, %B %d')}")
-    
-    # Top row: Key metrics
-    col1, col2, col3, col4 = st.columns(4)
-    
-    conn = get_conn()
-    cur = conn.cursor()
-    
-    cur.execute("SELECT COUNT(*) FROM companies WHERE status IN ('high_growth_target', 'prospect')")
-    targets = cur.fetchone()[0]
-    
-    cur.execute("SELECT COUNT(*) FROM outreach_log WHERE outreach_date >= date('now', '-7 days')")
-    outreach_week = cur.fetchone()[0]
-    
-    cur.execute("SELECT COUNT(*) FROM outreach_log WHERE follow_up_date <= date('now') AND follow_up_done = 0")
-    overdue = cur.fetchone()[0]
-    
-    cur.execute("SELECT COUNT(*) FROM funding_events WHERE event_date >= date('now', '-7 days')")
-    funding_week = cur.fetchone()[0]
-    
-    conn.close()
-    
-    with col1:
-        st.metric("Active Targets", targets)
-    with col2:
-        st.metric("Outreach This Week", outreach_week)
-    with col3:
-        st.metric("Overdue Follow-ups", overdue, delta_color="inverse")
-    with col4:
-        st.metric("New Funding (7d)", funding_week)
-    
-    st.divider()
-    
-    # Main content: Two columns
-    left, right = st.columns([2, 1])
-    
-    with left:
-        # TODAY'S PRIORITIES
-        st.subheader("🔥 Today's Priorities")
-        priorities = get_todays_priorities()
-        
-        if priorities:
-            for i, p in enumerate(priorities):
-                with st.container():
-                    col1, col2, col3 = st.columns([3, 2, 1])
-                    with col1:
-                        st.write(f"**{p['name']}**")
-                    with col2:
-                        st.caption(f"{p['reason']}: {p['detail']}")
-                    with col3:
-                        if st.button("Log Touch", key=f"log_{p['id']}"):
-                            st.session_state[f"show_log_{p['id']}"] = True
-                    
-                    # Show log form if button clicked
-                    if st.session_state.get(f"show_log_{p['id']}"):
-                        with st.form(key=f"form_{p['id']}"):
-                            otype = st.selectbox("Type", ["email", "call", "linkedin", "meeting"], key=f"type_{p['id']}")
-                            outcome = st.selectbox("Outcome", ["pending", "no_response", "responded_positive", "meeting_booked"], key=f"out_{p['id']}")
-                            notes = st.text_input("Notes", key=f"notes_{p['id']}")
-                            if st.form_submit_button("Save"):
-                                log_outreach(p['id'], None, otype, outcome, notes)
-                                st.success(f"Logged {otype} to {p['name']}")
-                                st.session_state[f"show_log_{p['id']}"] = False
-                                st.rerun()
-        else:
-            st.success("No urgent priorities — you're caught up!")
-        
-        st.divider()
-        
-        # FOLLOW-UPS DUE
-        st.subheader("📅 Follow-ups Due")
-        follow_ups = get_follow_ups_due()
-        
-        if follow_ups:
-            for f in follow_ups:
-                col1, col2, col3 = st.columns([2, 2, 1])
-                with col1:
-                    st.write(f"**{f['company']}**")
-                with col2:
-                    st.caption(f"Due: {f['follow_up_date']} | {f['notes'][:30] if f['notes'] else 'No notes'}...")
-                with col3:
-                    if st.button("Done", key=f"done_{f['id']}"):
-                        conn = get_conn()
-                        conn.execute("UPDATE outreach_log SET follow_up_done = 1 WHERE id = ?", (f['id'],))
-                        conn.commit()
-                        conn.close()
-                        st.rerun()
-        else:
-            st.success("No follow-ups due!")
-        
-        st.divider()
-        
-        # EXECUTIVE MOVES
-        st.subheader("🔄 Executive Moves (Client → Target)")
-        moves = get_executive_moves()
-        if moves:
-            for m in moves:
-                st.write(f"**{m['name']}** ({m['title']}) at **{m['current_company']}** — from {m['from_client']}")
-        else:
-            st.info("No tracked executive moves yet. Add previous_companies to contacts.")
-    
-    with right:
-        # QUICK ACTIONS
-        st.subheader("⚡ Quick Actions")
-        
-        # Quick log
-        with st.expander("Log Outreach"):
-            conn = get_conn()
-            cur = conn.cursor()
-            cur.execute("SELECT id, name FROM companies WHERE status IN ('active_client', 'high_growth_target', 'prospect') ORDER BY name")
-            companies = {row['name']: row['id'] for row in cur.fetchall()}
-            conn.close()
-            
-            company = st.selectbox("Company", list(companies.keys()))
-            otype = st.selectbox("Type", ["email", "call", "linkedin", "meeting", "intro_request"])
-            outcome = st.selectbox("Outcome", ["pending", "no_response", "responded_positive", "meeting_booked", "declined"])
-            notes = st.text_area("Notes", height=60)
-            follow_up = st.checkbox("Set follow-up (7 days)")
-            
-            if st.button("Log It"):
-                conn = get_conn()
-                cur = conn.cursor()
-                if follow_up:
-                    cur.execute("""
-                        INSERT INTO outreach_log (target_company_id, outreach_date, outreach_type, outcome, notes, follow_up_date)
-                        VALUES (?, date('now'), ?, ?, ?, date('now', '+7 days'))
-                    """, (companies[company], otype, outcome, notes))
-                else:
-                    cur.execute("""
-                        INSERT INTO outreach_log (target_company_id, outreach_date, outreach_type, outcome, notes)
-                        VALUES (?, date('now'), ?, ?, ?)
-                    """, (companies[company], otype, outcome, notes))
-                conn.commit()
-                conn.close()
-                st.success(f"Logged {otype} to {company}")
-        
-        # Path finder
-        with st.expander("Find Path to Company"):
-            conn = get_conn()
-            cur = conn.cursor()
-            cur.execute("SELECT id, name FROM companies WHERE status IN ('high_growth_target', 'prospect') ORDER BY name")
-            targets = {row['name']: row['id'] for row in cur.fetchall()}
-            conn.close()
-            
-            target = st.selectbox("Target Company", list(targets.keys()), key="path_target")
-            
-            if st.button("Find Paths"):
-                paths, former = get_warm_paths(targets[target])
-                
-                if former:
-                    st.write("**Former Client Employees:**")
-                    for f in former:
-                        st.write(f"• {f['name']} ({f['title']}) — from {f['previous_companies']}")
-                
-                if paths:
-                    st.write("**Relationship Paths:**")
-                    for p in paths:
-                        st.write(f"• {p['from']} → {p['to']} ({p['to_title']}) [{p['hops']} hops]")
-                
-                if not paths and not former:
-                    st.warning("No paths found. Build more relationships!")
-        
-        # Recent activity
-        st.subheader("📊 Recent Activity")
-        conn = get_conn()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT c.name, o.outreach_type, o.outcome, o.outreach_date
-            FROM outreach_log o
-            JOIN companies c ON o.target_company_id = c.id
-            ORDER BY o.outreach_date DESC LIMIT 5
-        """)
-        recent = cur.fetchall()
-        conn.close()
-        
-        for r in recent:
-            st.caption(f"{r['outreach_date']}: {r['outreach_type']} → {r['name']} ({r['outcome']})")
+st.markdown("---")
 
+# =============================================================================
+# TABS
+# =============================================================================
 
-if __name__ == "__main__":
-    if HAS_STREAMLIT:
-        main()
+tab_opps, tab_followups, tab_import, tab_quality = st.tabs([
+    "🎯 Opportunities", "📋 Follow-ups Due", "📥 Import Data", "🔍 Data Quality"
+])
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 1: OPPORTUNITIES
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_opps:
+    st.subheader("Signal-Driven Opportunities")
+
+    opp_col1, opp_col2, opp_col3 = st.columns(3)
+    with opp_col1:
+        lookback = st.slider("Lookback (days)", 1, 90, 7, key="opp_lookback")
+    with opp_col2:
+        min_score = st.slider("Min score", 0, 100, 10, key="opp_min")
+    with opp_col3:
+        show_all = st.checkbox("All companies", False, key="opp_all")
+
+    if show_all:
+        opportunities = infer_opportunities(min_score=min_score)
     else:
-        print("Streamlit required")
+        opportunities = find_new_opportunities(since_days=lookback)
+        opportunities = [o for o in opportunities if o['score'] >= min_score]
+
+    if opportunities:
+        for i, opp in enumerate(opportunities[:15], 1):
+            impact_arrow = "↑" if opp['space_impact'] > 0 else "↓" if opp['space_impact'] < 0 else "→"
+            cols = st.columns([1, 4, 1])
+            with cols[0]:
+                st.markdown(f"**#{i}** — {opp['score']}")
+            with cols[1]:
+                st.markdown(f"**{opp['company']}** — {opp['reason']}")
+                st.caption(f"Signals: {', '.join(opp['signals'][:4])} | "
+                          f"Action: {opp['recommended_action']}")
+            with cols[2]:
+                st.markdown(f"{impact_arrow} {opp['space_impact']}")
+
+            with st.expander(f"Log outreach — {opp['company']}", expanded=False):
+                lc1, lc2, lc3 = st.columns(3)
+                with lc1:
+                    o_type = st.selectbox("Type", ["email", "call", "linkedin", "meeting"],
+                                          key=f"d_otype_{opp['company_id']}")
+                with lc2:
+                    o_out = st.selectbox("Outcome",
+                                         ["sent", "connected", "voicemail", "meeting_set", "replied"],
+                                         key=f"d_oout_{opp['company_id']}")
+                with lc3:
+                    o_fu = st.number_input("Follow-up days", 0, 90, 7,
+                                           key=f"d_ofu_{opp['company_id']}")
+                o_notes = st.text_input("Notes", key=f"d_onotes_{opp['company_id']}")
+                if st.button("Log", key=f"d_olog_{opp['company_id']}"):
+                    log_outreach(company_id=opp['company_id'], outreach_type=o_type,
+                                 outcome=o_out, notes=o_notes, follow_up_days=o_fu)
+                    st.success(f"Logged {o_type} → {opp['company']}")
+
+        # Outreach gaps
+        st.markdown("---")
+        st.subheader("🕳️ Outreach Gaps")
+        gaps = get_outreach_gaps()
+        if gaps:
+            for g in gaps[:10]:
+                gc1, gc2, gc3 = st.columns([3, 1, 1])
+                with gc1:
+                    st.markdown(f"**{g['company']}** — {g['status'].replace('_', ' ').title()}")
+                with gc2:
+                    st.caption(f"Lean: {g['lean_score']}")
+                with gc3:
+                    if g['last_outreach']:
+                        st.caption(f"{g['days_since_outreach']}d ago")
+                    else:
+                        st.caption("Never contacted")
+        else:
+            st.info("No outreach gaps.")
+    else:
+        st.info("No opportunities found. Widen lookback or lower min score.")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 2: FOLLOW-UPS DUE
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_followups:
+    st.subheader("Follow-ups Due / Overdue")
+
+    followups = get_due_followups()
+    if followups:
+        for fu in followups:
+            fu_cols = st.columns([3, 1, 1, 1, 1])
+            with fu_cols[0]:
+                overdue = f" (**{fu['days_overdue']}d overdue**)" if fu['days_overdue'] > 0 else ""
+                st.markdown(f"**{fu['company_name']}** — {fu['outreach_type']} "
+                           f"on {fu['outreach_date']}{overdue}")
+                if fu.get('notes'):
+                    st.caption(fu['notes'])
+            with fu_cols[1]:
+                st.caption(f"Due: {fu['follow_up_date']}")
+            with fu_cols[2]:
+                if st.button("✅ Done", key=f"d_fu_done_{fu['id']}"):
+                    mark_followup_done(fu['id'])
+                    st.rerun()
+            with fu_cols[3]:
+                if st.button("+7d", key=f"d_fu_7_{fu['id']}"):
+                    mark_followup_done(fu['id'], reschedule_days=7)
+                    st.rerun()
+            with fu_cols[4]:
+                if st.button("+14d", key=f"d_fu_14_{fu['id']}"):
+                    mark_followup_done(fu['id'], reschedule_days=14)
+                    st.rerun()
+    else:
+        st.success("No follow-ups due. You're caught up.")
+
+    # Recent outreach log
+    st.markdown("---")
+    st.subheader("Recent Outreach Log")
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT o.outreach_date, c.name, o.outreach_type, o.outcome,
+               o.notes, o.follow_up_date, o.follow_up_done
+        FROM outreach_log o
+        LEFT JOIN companies c ON o.target_company_id = c.id
+        ORDER BY o.outreach_date DESC
+        LIMIT 20
+    """)
+    rows = cur.fetchall()
+    conn.close()
+    if rows:
+        for r in rows:
+            rd = dict(r)
+            done_tag = "✅" if rd.get('follow_up_done') else ""
+            st.caption(f"{rd['outreach_date']} | {rd['name']} | {rd['outreach_type']} | "
+                      f"{rd['outcome']} | FU: {rd.get('follow_up_date', 'none')} {done_tag}")
+    else:
+        st.info("No outreach logged yet.")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 3: IMPORT DATA
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_import:
+    st.subheader("Upload & Import CSV Data")
+
+    with st.expander("CSV Column Requirements"):
+        for csv_type, cols in REQUIRED_COLUMNS.items():
+            st.markdown(f"**{csv_type}:** {', '.join(cols)}")
+
+    upload_types = {
+        'linkedin': ("LinkedIn Connections", 'linkedin_connections.csv', 'linkedin'),
+        'contacts': ("Contacts", 'contacts.csv', 'contacts'),
+        'relationships': ("Relationships", 'relationships.csv', 'relationships'),
+        'clients': ("Clients", 'clients.csv', 'clients'),
+        'buildings': ("Buildings / Leases", 'buildings.csv', 'buildings'),
+    }
+
+    for key, (label, filename, vtype) in upload_types.items():
+        uploaded = st.file_uploader(f"Upload {label} CSV", type=['csv'],
+                                     key=f"d_upload_{key}")
+        if uploaded:
+            dest = os.path.join(IMPORT_DIR, filename)
+            with open(dest, 'wb') as f:
+                f.write(uploaded.getvalue())
+            valid, msg = validate_csv(dest, vtype)
+            if valid:
+                st.success(f"{label}: {msg}")
+            else:
+                st.error(f"{label}: {msg}")
+
+    st.divider()
+    if st.button("Run All Imports", type="primary", key="d_run_imports"):
+        with st.spinner("Importing..."):
+            results = run_all_imports()
+        if results:
+            st.json(results)
+            st.success("Import complete.")
+        else:
+            st.warning("No CSV files in imports directory.")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 4: DATA QUALITY
+# ─────────────────────────────────────────────────────────────────────────────
+
+with tab_quality:
+    st.subheader("Data Quality Report")
+
+    conn = get_conn()
+    cur = conn.cursor()
+
+    # Missing fields
+    st.markdown("**Missing Fields:**")
+    q1, q2, q3 = st.columns(3)
+
+    cur.execute("SELECT COUNT(*) FROM companies WHERE sector IS NULL OR sector = '' OR sector = 'unknown'")
+    q1.metric("Companies missing sector", cur.fetchone()[0])
+
+    cur.execute("SELECT COUNT(*) FROM contacts WHERE email IS NULL OR email = ''")
+    q2.metric("Contacts missing email", cur.fetchone()[0])
+
+    cur.execute("SELECT COUNT(*) FROM contacts WHERE previous_companies IS NULL OR previous_companies = ''")
+    q3.metric("Contacts missing prev companies", cur.fetchone()[0])
+
+    q4, q5, q6 = st.columns(3)
+    cur.execute("SELECT COUNT(*) FROM companies WHERE hq_city IS NULL OR hq_city = ''")
+    q4.metric("Companies missing HQ city", cur.fetchone()[0])
+
+    cur.execute("SELECT COUNT(*) FROM companies WHERE status IS NULL OR status = ''")
+    q5.metric("Companies missing status", cur.fetchone()[0])
+
+    cur.execute("SELECT COUNT(*) FROM contacts WHERE title IS NULL OR title = ''")
+    q6.metric("Contacts missing title", cur.fetchone()[0])
+
+    # Duplicates
+    st.markdown("---")
+    st.markdown("**Duplicate Company Names:**")
+    cur.execute("""
+        SELECT LOWER(name) as lname, COUNT(*) as cnt
+        FROM companies
+        GROUP BY LOWER(name)
+        HAVING cnt > 1
+        ORDER BY cnt DESC
+    """)
+    dupes = cur.fetchall()
+    if dupes:
+        for d in dupes:
+            dd = dict(d)
+            st.warning(f"\"{dd['lname']}\" appears {dd['cnt']} times")
+    else:
+        st.success("No duplicate company names.")
+
+    # Orphans
+    st.markdown("---")
+    st.markdown("**Orphaned Records:**")
+    o1, o2 = st.columns(2)
+
+    cur.execute("""
+        SELECT COUNT(*) FROM contacts
+        WHERE company_id IS NOT NULL
+        AND company_id NOT IN (SELECT id FROM companies)
+    """)
+    o1.metric("Contacts with invalid company_id", cur.fetchone()[0])
+
+    cur.execute("""
+        SELECT COUNT(*) FROM outreach_log
+        WHERE target_company_id IS NOT NULL
+        AND target_company_id NOT IN (SELECT id FROM companies)
+    """)
+    o2.metric("Outreach with invalid company_id", cur.fetchone()[0])
+
+    # Table counts
+    st.markdown("---")
+    st.markdown("**Table Row Counts:**")
+    tables = ['companies', 'contacts', 'relationships', 'funding_events',
+              'hiring_signals', 'outreach_log', 'buildings', 'leases',
+              'deals', 'market_notes']
+    tc = st.columns(5)
+    for i, t in enumerate(tables):
+        try:
+            cur.execute(f"SELECT COUNT(*) FROM {t}")
+            tc[i % 5].metric(t.replace('_', ' ').title(), cur.fetchone()[0])
+        except Exception:
+            tc[i % 5].metric(t.replace('_', ' ').title(), "N/A")
+
+    conn.close()
+
+# =============================================================================
+# FOOTER
+# =============================================================================
+
+st.markdown("---")
+st.caption(f"Relationship Engine — {datetime.now().strftime('%Y-%m-%d %H:%M')}")

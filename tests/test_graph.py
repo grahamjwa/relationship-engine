@@ -18,10 +18,8 @@ root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if root_dir not in sys.path:
     sys.path.insert(0, root_dir)
 
-# Mock thresholds before importing graph_engine
-sys.modules['core.thresholds'] = MagicMock()
-sys.modules['core.thresholds'].REVENUE_THRESHOLD = 50_000_000
-sys.modules['core.thresholds'].SF_THRESHOLD = 30_000
+# Pre-load real thresholds module so graph_engine can import it
+import core.thresholds  # noqa: E402
 
 from core.graph_engine import (
     DiGraph,

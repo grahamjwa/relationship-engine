@@ -10,9 +10,9 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-  # noqa: F401
+import config  # noqa: F401
 
-from graph_engine import get_db_path
+from core.graph_engine import get_db_path
 from linkedin_import import import_connections as import_linkedin_connections
 from import_contacts import import_contacts as import_contacts_csv
 from import_relationships import import_relationships as import_relationships_csv
@@ -88,7 +88,7 @@ def run_all_imports(db_path=None):
     if results:
         print("\nRecomputing opportunity scores...")
         try:
-            from opportunity_scoring import save_opportunity_scores
+            from core.opportunity_scoring import save_opportunity_scores
             save_opportunity_scores(db_path=db_path)
             print("Scores recomputed.")
         except Exception as e:

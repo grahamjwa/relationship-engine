@@ -224,3 +224,79 @@
 2026-02-17 03:09:52,458 [INFO] Job "Morning Signal Scan (trigger: cron[hour='6', minute='0'], next run at: 2026-02-18 06:00:00 EST)" executed successfully
 2026-02-17 04:00:00,050 [INFO] Running job "Morning Briefing (trigger: cron[hour='7', minute='0'], next run at: 2026-02-18 07:00:00 EST)" (scheduled at 2026-02-17 07:00:00-05:00)
 2026-02-17 04:00:00,393 [INFO] Job "Morning Briefing (trigger: cron[hour='7', minute='0'], next run at: 2026-02-18 07:00:00 EST)" executed successfully
+2026-02-17 14:00:00,403 [INFO] Running job "Afternoon Signal Scan (trigger: cron[hour='17', minute='0'], next run at: 2026-02-18 17:00:00 EST)" (scheduled at 2026-02-17 17:00:00-05:00)
+2026-02-17 14:00:00,407 [INFO] Starting afternoon signal scan...
+2026-02-17 14:00:13,475 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:16,260 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:19,721 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:23,095 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:25,556 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:27,911 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:30,473 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:32,726 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:35,082 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:38,051 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:51,466 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:53,888 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:56,278 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:00:58,939 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:01,297 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:03,650 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:06,210 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:08,567 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:11,535 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:14,709 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:20,550 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:22,699 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:24,849 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:27,100 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:29,048 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:31,328 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:33,860 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:35,909 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:38,365 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:40,824 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:52,701 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:56,081 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:01:58,130 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:00,854 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:03,045 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:05,707 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:08,164 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:11,234 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:13,593 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:16,872 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:40,522 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:43,082 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:45,949 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:48,714 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:51,172 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:53,837 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:02:56,606 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:03:01,108 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:03:03,668 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:03:06,432 [INFO] HTTP Request: POST https://api.anthropic.com/v1/messages "HTTP/1.1 200 OK"
+2026-02-17 14:03:06,669 [INFO] Afternoon signal scan complete.
+2026-02-17 14:03:06,669 [INFO] Job "Afternoon Signal Scan (trigger: cron[hour='17', minute='0'], next run at: 2026-02-18 17:00:00 EST)" executed successfully
+2026-02-17 23:00:00,355 [INFO] Running job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-19 02:00:00 EST)" (scheduled at 2026-02-18 02:00:00-05:00)
+Traceback (most recent call last):
+  File "/Users/brazosdedios/relationship_engine/nightly_recompute.py", line 228, in run_nightly
+  File "/Users/brazosdedios/relationship_engine/opportunity_scoring.py", line 565, in save_opportunity_scores
+  File "/Users/brazosdedios/relationship_engine/graph_engine.py", line 54, in build_graph
+sqlite3.OperationalError: unable to open database file
+2026-02-17 23:00:00,383 [INFO] Job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-19 02:00:00 EST)" executed successfully
+2026-02-18 03:00:00,163 [INFO] Running job "Morning Signal Scan (trigger: cron[hour='6', minute='0'], next run at: 2026-02-19 06:00:00 EST)" (scheduled at 2026-02-18 06:00:00-05:00)
+2026-02-18 03:00:00,166 [INFO] Starting morning signal scan...
+2026-02-18 03:00:00,173 [ERROR] Morning scan failed: unable to open database file
+2026-02-18 03:00:00,173 [INFO] Job "Morning Signal Scan (trigger: cron[hour='6', minute='0'], next run at: 2026-02-19 06:00:00 EST)" executed successfully
+2026-02-18 04:00:00,049 [INFO] Running job "Morning Briefing (trigger: cron[hour='7', minute='0'], next run at: 2026-02-19 07:00:00 EST)" (scheduled at 2026-02-18 07:00:00-05:00)
+2026-02-18 04:00:00,052 [ERROR] Job "Morning Briefing (trigger: cron[hour='7', minute='0'], next run at: 2026-02-19 07:00:00 EST)" raised an exception
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.14/site-packages/apscheduler/executors/base.py", line 131, in run_job
+  File "/Users/brazosdedios/relationship_engine/morning_briefing.py", line 195, in run_morning_briefing
+  File "/Users/brazosdedios/relationship_engine/morning_briefing.py", line 34, in get_briefing_data
+sqlite3.OperationalError: unable to open database file
+2026-02-18 14:00:00,403 [INFO] Running job "Afternoon Signal Scan (trigger: cron[hour='17', minute='0'], next run at: 2026-02-19 17:00:00 EST)" (scheduled at 2026-02-18 17:00:00-05:00)
+2026-02-18 14:00:00,405 [INFO] Starting afternoon signal scan...
+2026-02-18 14:00:00,412 [ERROR] Afternoon scan failed: unable to open database file
+2026-02-18 14:00:00,413 [INFO] Job "Afternoon Signal Scan (trigger: cron[hour='17', minute='0'], next run at: 2026-02-19 17:00:00 EST)" executed successfully
