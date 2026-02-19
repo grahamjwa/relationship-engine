@@ -28,6 +28,7 @@ from core.outreach_manager import (log_outreach, get_due_followups,
 from core.signals import SIGNAL_TYPES
 from importers.validate_csv import validate_csv, REQUIRED_COLUMNS
 from import_all import IMPORT_DIR, run_all_imports, list_pending_imports
+from core.cost_tracker import get_sidebar_widget_data
 
 st.set_page_config(page_title="Relationship Engine", page_icon="🏢", layout="wide")
 
@@ -398,6 +399,20 @@ with tab_quality:
             tc[i % 5].metric(t.replace('_', ' ').title(), "N/A")
 
     conn.close()
+
+# =============================================================================
+# SIDEBAR: COST TRACKER
+# =============================================================================
+
+with st.sidebar:
+    st.subheader("API Spend")
+    try:
+        spend = get_sidebar_widget_data()
+        st.metric("Today", f"${spend['today']:.4f}", f"{spend['calls_today']} calls")
+        st.metric("This Week", f"${spend['week']:.4f}")
+        st.metric("This Month", f"${spend['month']:.4f}")
+    except Exception:
+        st.caption("Cost tracking not yet active.")
 
 # =============================================================================
 # FOOTER

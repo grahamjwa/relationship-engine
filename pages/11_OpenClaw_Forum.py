@@ -139,6 +139,88 @@ else:
     st.info("No pending suggestions. OpenClaw will propose ideas based on scanning.")
 
 # =============================================================================
+# PENDING ACTIONS (Approval Queue)
+# =============================================================================
+
+st.subheader("Pending Actions")
+st.caption("Actions OpenClaw wants to take — approve before execution")
+
+conn_aq = get_conn()
+cur_aq = conn_aq.cursor()
+
+# Pending actions from approved suggestions that have actionable next steps
+try:
+    cur_aq.execute("""
+        SELECT s.id, s.title, s.description, s.suggestion_type, s.priority,
+               s.user_response, s.responded_at
+        FROM openclaw_suggestions s
+        WHERE s.status = 'approved'
+        AND s.suggestion_type IN ('task', 'improvement')
+        ORDER BY
+            CASE s.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+            s.responded_at DESC
+        LIMIT 15
+    """)
+    action_queue = [dict(r) for r in cur_aq.fetchall()]
+except Exception:
+    action_queue = []
+
+# Also show recent activity needing review
+try:
+    cur_aq.execute("""
+        SELECT id, action_type, description, target_table, target_id,
+               created_at, agent
+        FROM openclaw_activity
+        WHERE reversed = 0
+        AND created_at >= datetime('now', '-24 hours')
+        ORDER BY created_at DESC
+        LIMIT 10
+    """)
+    recent_actions = [dict(r) for r in cur_aq.fetchall()]
+except Exception:
+    recent_actions = []
+
+conn_aq.close()
+
+aq_tab1, aq_tab2 = st.tabs(["🎯 Queued Actions", "📜 Recent Activity"])
+
+with aq_tab1:
+    if action_queue:
+        for aq in action_queue:
+            pri_badge = {'high': '🔴', 'medium': '🟡', 'low': '🟢'}.get(
+                aq.get('priority', ''), '')
+            aq_cols = st.columns([4, 1])
+            with aq_cols[0]:
+                st.markdown(f"{pri_badge} **{aq['title']}**")
+                if aq.get('description'):
+                    st.caption(aq['description'][:150])
+                if aq.get('user_response'):
+                    st.caption(f"Your note: {aq['user_response']}")
+            with aq_cols[1]:
+                if st.button("✅ Complete", key=f"aq_complete_{aq['id']}"):
+                    update_suggestion(aq['id'], 'completed')
+                    st.rerun()
+            st.markdown("---")
+    else:
+        st.caption("No actions queued. Approve task/improvement suggestions above.")
+
+with aq_tab2:
+    if recent_actions:
+        for ra in recent_actions:
+            type_icon = {
+                'insert': '➕', 'update': '✏️', 'delete': '🗑️',
+                'scan': '🔍', 'alert': '🔔', 'import': '📥',
+            }.get(ra['action_type'], '📝')
+            st.caption(
+                f"{type_icon} {ra['created_at'][:16]} | {ra['action_type']} | "
+                f"{ra['description'][:80]} | Agent: {ra.get('agent', '?')}"
+            )
+    else:
+        st.caption("No recent activity in the last 24 hours.")
+
+st.markdown("---")
+
+# =============================================================================
 # HISTORY
 # =============================================================================
 
