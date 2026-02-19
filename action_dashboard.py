@@ -401,6 +401,85 @@ with tab_quality:
     conn.close()
 
 # =============================================================================
+# HIGH ALERT TICKER
+# =============================================================================
+
+st.markdown("---")
+st.subheader("🔴 High Alerts")
+
+try:
+    alert_conn = sqlite3.connect(DB_PATH)
+    alert_conn.row_factory = sqlite3.Row
+    alert_cur = alert_conn.cursor()
+    alerts = []
+
+    # High-priority exec changes (last 7 days)
+    try:
+        alert_cur.execute("""
+            SELECT person_name, new_title, new_company, old_company, change_type,
+                   effective_date
+            FROM executive_changes
+            WHERE priority = 'high'
+            AND effective_date >= date('now', '-7 days')
+            ORDER BY effective_date DESC
+            LIMIT 3
+        """)
+        for r in alert_cur.fetchall():
+            r = dict(r)
+            alerts.append(f"👔 [{r['effective_date'][:10]}] **{r['person_name']}** — "
+                        f"{r['change_type']}: {r.get('new_title', '?')} at {r.get('new_company', '?')}")
+    except Exception:
+        pass
+
+    # Large funding at prospects (>$50M, last 7 days)
+    try:
+        alert_cur.execute("""
+            SELECT c.name, f.amount, f.round_type, f.event_date
+            FROM funding_events f
+            JOIN companies c ON f.company_id = c.id
+            WHERE f.amount >= 50000000
+            AND f.event_date >= date('now', '-7 days')
+            AND c.status IN ('prospect', 'high_growth_target', 'watching')
+            ORDER BY f.amount DESC
+            LIMIT 2
+        """)
+        for r in alert_cur.fetchall():
+            r = dict(r)
+            alerts.append(f"💰 [{r['event_date'][:10]}] **{r['name']}** — "
+                        f"${r['amount']:,.0f} ({r.get('round_type', '?')})")
+    except Exception:
+        pass
+
+    # Agency tenants giving notice (lease expiry < 6 months)
+    try:
+        alert_cur.execute("""
+            SELECT t.tenant_name, t.occupied_sf, t.lease_expiry_date, b.name as building
+            FROM agency_tenants t
+            JOIN agency_buildings b ON t.building_id = b.id
+            WHERE t.lease_expiry_date IS NOT NULL
+            AND t.lease_expiry_date BETWEEN date('now') AND date('now', '+6 months')
+            AND t.occupied_sf >= 10000
+            ORDER BY t.lease_expiry_date ASC
+            LIMIT 2
+        """)
+        for r in alert_cur.fetchall():
+            r = dict(r)
+            alerts.append(f"🏢 [{r['lease_expiry_date'][:10]}] **{r['tenant_name']}** — "
+                        f"{r['occupied_sf']:,} SF at {r['building']} expiring")
+    except Exception:
+        pass
+
+    alert_conn.close()
+
+    if alerts:
+        for a in alerts[:5]:
+            st.markdown(a)
+    else:
+        st.caption("No high alerts this week.")
+except Exception:
+    st.caption("Alert system initializing.")
+
+# =============================================================================
 # SIDEBAR: COST TRACKER
 # =============================================================================
 
