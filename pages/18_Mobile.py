@@ -1,15 +1,17 @@
 """
 Mobile View — Simplified single-column layout for phone access.
 
+Single column, large buttons, no charts.
 Sections:
-  1. Today's Follow-ups (with Done button)
-  2. High Alerts (last 3)
-  3. Quick Log buttons
-  4. Recent Activity (last 5)
+  1. ACTION NEEDED (overdue follow-ups)
+  2. TOP 5 (Company - Score - One Signal)
+  3. TODAY (last 24h signals, max 5)
+  4. QUICK LOG [Call] [Meeting] [Note] [Rumor]
 """
 
 import os
 import sys
+import re
 import sqlite3
 from datetime import datetime
 
@@ -32,226 +34,214 @@ def get_conn():
 
 
 # =============================================================================
-# 1. TODAY'S FOLLOW-UPS
+# 1. ACTION NEEDED
 # =============================================================================
-
-st.markdown("### 📋 Follow-ups")
 
 conn = get_conn()
 cur = conn.cursor()
 
-# Overdue + today
 cur.execute("""
     SELECT o.id, o.follow_up_date, c.name as company, o.outreach_type, o.notes
     FROM outreach_log o
     LEFT JOIN companies c ON o.target_company_id = c.id
-    WHERE o.follow_up_done = 0
-    AND o.follow_up_date IS NOT NULL
+    WHERE o.follow_up_done = 0 AND o.follow_up_date IS NOT NULL
     AND o.follow_up_date <= ?
-    ORDER BY o.follow_up_date ASC
-    LIMIT 10
+    ORDER BY o.follow_up_date ASC LIMIT 10
 """, (today_str,))
 followups = [dict(r) for r in cur.fetchall()]
 conn.close()
+
+st.markdown(f"### 🔴 Action Needed ({len(followups)})")
 
 if followups:
     for fu in followups:
         is_overdue = fu['follow_up_date'] < today_str
         prefix = "🔴" if is_overdue else "🔵"
         company = fu.get('company', '?')
-        otype = fu.get('outreach_type', '?')
 
-        cols = st.columns([4, 1])
+        cols = st.columns([5, 1])
         with cols[0]:
-            st.markdown(f"{prefix} **{company}** — {otype}")
-            if fu.get('notes'):
-                st.caption(fu['notes'][:60])
+            st.markdown(f"{prefix} **{company}** — {fu.get('outreach_type', '?')}")
         with cols[1]:
-            if st.button("✅", key=f"mob_done_{fu['id']}"):
-                conn = get_conn()
-                conn.execute("UPDATE outreach_log SET follow_up_done = 1 WHERE id = ?",
-                           (fu['id'],))
-                conn.commit()
-                conn.close()
+            if st.button("Done", key=f"mob_{fu['id']}"):
+                c = get_conn()
+                c.execute("UPDATE outreach_log SET follow_up_done = 1 WHERE id = ?",
+                         (fu['id'],))
+                c.commit()
+                c.close()
                 st.rerun()
 else:
-    st.caption("No follow-ups due.")
+    st.caption("Clear.")
 
 st.markdown("---")
 
 # =============================================================================
-# 2. HIGH ALERTS
+# 2. TOP 5
 # =============================================================================
 
-st.markdown("### 🔴 Alerts")
-
-conn = get_conn()
-cur = conn.cursor()
-alerts = []
-
-# Exec changes
-try:
-    cur.execute("""
-        SELECT person_name, new_title, new_company, change_type, effective_date
-        FROM executive_changes
-        WHERE priority = 'high'
-        AND effective_date >= date('now', '-7 days')
-        ORDER BY effective_date DESC LIMIT 2
-    """)
-    for r in cur.fetchall():
-        r = dict(r)
-        alerts.append(f"👔 {r['person_name']} → {r.get('new_title', '?')} at {r.get('new_company', '?')}")
-except Exception:
-    pass
-
-# Large funding
-try:
-    cur.execute("""
-        SELECT c.name, f.amount, f.round_type, f.event_date, f.lead_investor
-        FROM funding_events f
-        JOIN companies c ON f.company_id = c.id
-        WHERE f.amount >= 50000000
-        AND f.event_date >= date('now', '-7 days')
-        ORDER BY f.amount DESC LIMIT 2
-    """)
-    for r in cur.fetchall():
-        r = dict(r)
-        date_str = r['event_date'][:10] if r.get('event_date') else '?'
-        amt = f"${r['amount']:,.0f}" if r.get('amount') else "?"
-        val_str = ""
-        round_type = r.get('round_type', '?')
-
-        # Check if lead investor is in our DB
-        investor_str = ""
-        if r.get('lead_investor'):
-            investor_str = r['lead_investor']
-
-        alerts.append(f"💰 ({date_str}) **{r['name']}** received {amt} ({round_type})"
-                     + (f" from {investor_str}" if investor_str else ""))
-except Exception:
-    pass
-
-# Agency tenant expiring
-try:
-    cur.execute("""
-        SELECT t.tenant_name, t.occupied_sf, b.name as building
-        FROM agency_tenants t
-        JOIN agency_buildings b ON t.building_id = b.id
-        WHERE t.lease_expiry_date BETWEEN date('now') AND date('now', '+6 months')
-        AND t.occupied_sf >= 10000
-        LIMIT 1
-    """)
-    for r in cur.fetchall():
-        r = dict(r)
-        alerts.append(f"🏢 {r['tenant_name']} ({r['occupied_sf']:,} SF) at {r['building']} — expiring soon")
-except Exception:
-    pass
-
-conn.close()
-
-if alerts:
-    for a in alerts[:3]:
-        st.markdown(a)
-else:
-    st.caption("No alerts.")
-
-st.markdown("---")
-
-# =============================================================================
-# 3. QUICK LOG
-# =============================================================================
-
-st.markdown("### ⚡ Quick Log")
-
-log_type = st.radio("Type", ["Call", "Meeting", "Rumor", "Funding"], horizontal=True, key="mob_log_type")
-
-log_company = st.text_input("Company", key="mob_log_company")
-log_notes = st.text_input("Notes", key="mob_log_notes")
-
-if st.button("Log It", key="mob_log_btn") and log_company:
-    conn = get_conn()
-    cur = conn.cursor()
-
-    # Find company
-    cur.execute("SELECT id FROM companies WHERE name LIKE ?", (f"%{log_company}%",))
-    company_row = cur.fetchone()
-    company_id = company_row['id'] if company_row else None
-
-    if log_type in ("Call", "Meeting"):
-        outreach_type = 'call' if log_type == 'Call' else 'in_person'
-        cur.execute("""
-            INSERT INTO outreach_log
-            (target_company_id, outreach_date, outreach_type, outcome, notes,
-             follow_up_date, follow_up_done)
-            VALUES (?, date('now'), ?, 'pending', ?, date('now', '+7 days'), 0)
-        """, (company_id, outreach_type, log_notes or f"{log_type} with {log_company}"))
-        conn.commit()
-        st.success(f"Logged {log_type.lower()} with {log_company}")
-
-    elif log_type == "Rumor":
-        # Parse SF from notes if possible
-        sf = 0
-        import re
-        sf_match = re.search(r'(\d[\d,]*)\s*(?:sf|SF|rsf|RSF)', log_notes or '')
-        if sf_match:
-            sf = int(sf_match.group(1).replace(',', ''))
-
-        cur.execute("""
-            INSERT INTO market_requirements (company_id, sf_min, notes, source, status)
-            VALUES (?, ?, ?, 'discord', 'active')
-        """, (company_id, sf, log_notes or f"{log_company} in market"))
-        conn.commit()
-        st.success(f"Logged rumor: {log_company}")
-
-    elif log_type == "Funding":
-        # Parse amount from notes
-        amount = 0
-        amt_match = re.search(r'\$?([\d,.]+)\s*([MBmb])', log_notes or '') if log_notes else None
-        if amt_match:
-            num = float(amt_match.group(1).replace(',', ''))
-            mult = amt_match.group(2).upper()
-            amount = int(num * 1000000 if mult == 'M' else num * 1000000000)
-
-        cur.execute("""
-            INSERT INTO funding_events (company_id, event_date, amount, round_type, notes)
-            VALUES (?, date('now'), ?, 'unknown', ?)
-        """, (company_id, amount, log_notes or f"Funding for {log_company}"))
-        conn.commit()
-        st.success(f"Logged funding: {log_company}")
-
-    conn.close()
-
-st.markdown("---")
-
-# =============================================================================
-# 4. RECENT ACTIVITY
-# =============================================================================
-
-st.markdown("### 📜 Recent")
+st.markdown("### 📊 Top 5")
 
 conn = get_conn()
 cur = conn.cursor()
 
 cur.execute("""
-    SELECT o.outreach_date, c.name as company, o.outreach_type, o.outcome, o.notes
-    FROM outreach_log o
-    LEFT JOIN companies c ON o.target_company_id = c.id
-    ORDER BY o.outreach_date DESC, o.id DESC
+    SELECT c.id, c.name, c.opportunity_score,
+           (SELECT h.description FROM hiring_signals h
+            WHERE h.company_id = c.id ORDER BY h.signal_date DESC LIMIT 1) as last_hiring,
+           (SELECT f.round_type || ' $' || CAST(f.amount AS TEXT)
+            FROM funding_events f WHERE f.company_id = c.id
+            ORDER BY f.event_date DESC LIMIT 1) as last_funding,
+           (SELECT l.lease_expiry FROM leases l
+            WHERE l.company_id = c.id AND l.lease_expiry >= date('now')
+            ORDER BY l.lease_expiry ASC LIMIT 1) as next_expiry
+    FROM companies c
+    WHERE c.opportunity_score IS NOT NULL
+    AND c.status NOT IN ('team_affiliated')
+    ORDER BY c.opportunity_score DESC
     LIMIT 5
 """)
-recent = [dict(r) for r in cur.fetchall()]
+top5 = [dict(r) for r in cur.fetchall()]
 conn.close()
 
-if recent:
-    for r in recent:
-        company = r.get('company', '?')
-        otype = r.get('outreach_type', '?')
-        date = r.get('outreach_date', '?')[:10] if r.get('outreach_date') else '?'
-        outcome = r.get('outcome', '')
-        st.caption(f"({date}) **{company}** — {otype}"
-                  + (f" → {outcome}" if outcome else ""))
-else:
-    st.caption("No recent activity.")
+for co in top5:
+    score = co.get('opportunity_score', 0) or 0
+    # Pick best signal to show
+    signal = ""
+    if co.get('last_funding'):
+        signal = co['last_funding'][:40]
+    elif co.get('last_hiring'):
+        signal = co['last_hiring'][:40]
+    elif co.get('next_expiry'):
+        signal = f"Lease exp {co['next_expiry']}"
+
+    st.markdown(f"**{co['name']}** ({score:.0f}) — {signal}")
 
 st.markdown("---")
-st.caption(f"Mobile View — {datetime.now().strftime('%H:%M')}")
+
+# =============================================================================
+# 3. TODAY (last 24h signals)
+# =============================================================================
+
+st.markdown("### 📰 Today")
+
+conn = get_conn()
+cur = conn.cursor()
+signals_24h = []
+
+# Funding
+try:
+    cur.execute("""
+        SELECT c.name, f.amount, f.round_type, f.event_date, f.lead_investor
+        FROM funding_events f
+        JOIN companies c ON f.company_id = c.id
+        WHERE f.event_date >= date('now', '-1 day')
+        ORDER BY f.amount DESC LIMIT 3
+    """)
+    for r in cur.fetchall():
+        r = dict(r)
+        amt = f"${r['amount']:,.0f}" if r.get('amount') else "?"
+
+        # Check if lead investor is in our DB
+        investors = ""
+        if r.get('lead_investor'):
+            cur2 = conn.cursor()
+            cur2.execute("SELECT name FROM companies WHERE name LIKE ?",
+                        (f"%{r['lead_investor'].split(',')[0].strip()}%",))
+            known = cur2.fetchone()
+            if known:
+                investors = f"[{known['name']}]"
+                if ',' in (r.get('lead_investor') or ''):
+                    others = r['lead_investor'].split(',')[1:]
+                    investors += ', ' + ', '.join(o.strip() for o in others[:2])
+            else:
+                investors = r.get('lead_investor', '')[:40]
+
+        date_short = r['event_date'][5:10] if r.get('event_date') else '?'
+        signals_24h.append(
+            f"💰 ({date_short}) {r['name']} received {amt} "
+            f"({r.get('round_type', '?')})"
+            + (f" from {investors}" if investors else ""))
+except Exception:
+    pass
+
+# Exec changes
+try:
+    cur.execute("""
+        SELECT person_name, new_title, new_company, effective_date
+        FROM executive_changes
+        WHERE effective_date >= date('now', '-1 day')
+        AND priority IN ('high', 'medium')
+        ORDER BY effective_date DESC LIMIT 2
+    """)
+    for r in cur.fetchall():
+        r = dict(r)
+        signals_24h.append(f"👔 {r['person_name']} → {r.get('new_title', '?')} at {r.get('new_company', '?')}")
+except Exception:
+    pass
+
+conn.close()
+
+if signals_24h:
+    for s in signals_24h[:5]:
+        st.markdown(s)
+else:
+    st.caption("No signals today.")
+
+st.markdown("---")
+
+# =============================================================================
+# 4. QUICK LOG
+# =============================================================================
+
+st.markdown("### ⚡ Quick Log")
+
+log_type = st.radio("", ["Call", "Meeting", "Note", "Rumor"], horizontal=True, key="mob_type")
+
+log_company = st.text_input("Company", key="mob_co")
+log_notes = st.text_input("Details", key="mob_notes")
+
+if st.button("Log It", key="mob_log", use_container_width=True) and log_company:
+    conn = get_conn()
+    cur = conn.cursor()
+
+    cur.execute("SELECT id FROM companies WHERE name LIKE ?", (f"%{log_company}%",))
+    company_row = cur.fetchone()
+    cid = company_row['id'] if company_row else None
+
+    if log_type in ("Call", "Meeting"):
+        otype = 'call' if log_type == 'Call' else 'in_person'
+        cur.execute("""
+            INSERT INTO outreach_log
+            (target_company_id, outreach_date, outreach_type, outcome, notes,
+             follow_up_date, follow_up_done)
+            VALUES (?, date('now'), ?, 'pending', ?, date('now', '+7 days'), 0)
+        """, (cid, otype, log_notes or f"{log_type} with {log_company}"))
+        conn.commit()
+        st.success("OK")
+
+    elif log_type == "Note":
+        cur.execute("""
+            INSERT INTO outreach_log
+            (target_company_id, outreach_date, outreach_type, outcome, notes,
+             follow_up_done)
+            VALUES (?, date('now'), 'note', 'logged', ?, 1)
+        """, (cid, log_notes or f"Note: {log_company}"))
+        conn.commit()
+        st.success("OK")
+
+    elif log_type == "Rumor":
+        sf = 0
+        sf_match = re.search(r'(\d[\d,]*)\s*(?:sf|SF|rsf|RSF)', log_notes or '')
+        if sf_match:
+            sf = int(sf_match.group(1).replace(',', ''))
+        cur.execute("""
+            INSERT INTO market_requirements (company_id, sf_min, notes, source, status)
+            VALUES (?, ?, ?, 'mobile', 'active')
+        """, (cid, sf, log_notes or f"{log_company} in market"))
+        conn.commit()
+        st.success("OK")
+
+    conn.close()
+
+st.markdown("---")
+st.caption(f"{datetime.now().strftime('%H:%M')}")

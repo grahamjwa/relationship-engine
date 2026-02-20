@@ -14,6 +14,7 @@ import config  # noqa: F401
 import streamlit as st
 from core.graph_engine import get_db_path, build_graph, find_shortest_path
 from core.path_finder import find_warm_intros
+from core.opportunity_scoring import explain_score
 from scrapers.executive_scanner import get_executives, get_recent_changes, classify_title
 
 st.set_page_config(page_title="Company Deep Dive", page_icon="🔍", layout="wide")
@@ -225,6 +226,40 @@ if selected:
             st.rerun()
 
     st.markdown("---")
+
+    # =================================================================
+    # WHY THIS SCORE
+    # =================================================================
+    try:
+        breakdown = explain_score(company_id)
+        if breakdown and breakdown.get('boosts'):
+            st.subheader("Why This Score")
+
+            score_cols = st.columns([2, 3])
+            with score_cols[0]:
+                # Score build-up
+                lines = []
+                for b in sorted(breakdown['boosts'], key=lambda x: x['points'], reverse=True):
+                    lines.append(f"+ **{b['points']:.0f}** {b['label']} — {b['detail']}")
+                st.markdown("\n\n".join(lines))
+
+                if breakdown.get('multipliers'):
+                    for m in breakdown['multipliers']:
+                        st.markdown(f"× **{m['factor']}** {m['label']}")
+
+                st.markdown(f"### = {breakdown['final_score']:.0f} Final")
+
+            with score_cols[1]:
+                if breakdown.get('top_reasons'):
+                    st.markdown("**Top Reasons to Reach Out**")
+                    for i, reason in enumerate(breakdown['top_reasons'], 1):
+                        st.markdown(f"{i}. {reason}")
+                if breakdown.get('warm_intro'):
+                    st.markdown(f"**Warm Path:** {breakdown['warm_intro']}")
+
+            st.markdown("---")
+    except Exception:
+        pass
 
     # Two-column layout: left = intel, right = relationships
     left, right = st.columns([3, 2])

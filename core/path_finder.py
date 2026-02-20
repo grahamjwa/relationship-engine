@@ -11,7 +11,7 @@ from typing import List, Dict, Optional, Tuple
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config  # noqa: F401
 
-from graph_engine import get_db_path, build_graph, find_shortest_path
+from core.graph_engine import get_db_path, build_graph, find_shortest_path
 
 
 def get_company_contacts(company_id: int, db_path: str = None) -> List[Dict]:
@@ -42,7 +42,10 @@ def get_company_contacts(company_id: int, db_path: str = None) -> List[Dict]:
 
 
 def get_team_contacts(db_path: str = None) -> List[Dict]:
-    """Get all team contacts (our people)."""
+    """Get all team contacts (our people).
+    Team = single unit. Bob Alexander, Ryan, Graham, Nicole Marshall, Taylor,
+    plus anyone with role_level='team' or at a team_affiliated company.
+    """
     if db_path is None:
         db_path = get_db_path()
 
@@ -51,10 +54,12 @@ def get_team_contacts(db_path: str = None) -> List[Dict]:
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT c.id, c.first_name || ' ' || c.last_name as name, c.title, comp.name as company
+        SELECT c.id, c.first_name || ' ' || c.last_name as name, c.title,
+               COALESCE(comp.name, '') as company
         FROM contacts c
-        JOIN companies comp ON c.company_id = comp.id
-        WHERE c.role_level = 'team' OR comp.status = 'team_affiliated'
+        LEFT JOIN companies comp ON c.company_id = comp.id
+        WHERE c.role_level = 'team'
+           OR comp.status = 'team_affiliated'
     """)
 
     results = [dict(row) for row in cur.fetchall()]
@@ -62,8 +67,59 @@ def get_team_contacts(db_path: str = None) -> List[Dict]:
     return results
 
 
+def get_team_ids(db_path: str = None) -> set:
+    """Get set of all team contact IDs."""
+    return {t['id'] for t in get_team_contacts(db_path)}
+
+
+def _collapse_team_hops(path_ids: list, team_ids: set) -> list:
+    """
+    Collapse consecutive team members in a path to a single 'Team' node.
+    Team members are NOT hops — they are one unit.
+    """
+    if not path_ids:
+        return path_ids
+
+    collapsed = []
+    team_rep = None
+
+    for node in path_ids:
+        node_id = None
+        if node.startswith("contact_"):
+            try:
+                node_id = int(node.replace("contact_", ""))
+            except ValueError:
+                pass
+
+        is_team = node_id in team_ids if node_id else False
+
+        if is_team:
+            if team_rep is None:
+                team_rep = node
+        else:
+            if team_rep is not None:
+                collapsed.append(team_rep)
+                team_rep = None
+            collapsed.append(node)
+
+    if team_rep is not None:
+        collapsed.append(team_rep)
+
+    return collapsed
+
+
+def _count_external_hops(path_ids: list, team_ids: set) -> int:
+    """Count hops excluding team-to-team transitions."""
+    collapsed = _collapse_team_hops(path_ids, team_ids)
+    return max(len(collapsed) - 1, 0)
+
+
 def find_all_paths(target_company_id: int, max_hops: int = 3, db_path: str = None) -> List[Dict]:
-    """Find all paths from team to target company contacts."""
+    """Find all paths from team to target company contacts.
+
+    IMPORTANT: Team members (Bob, Ryan, Graham, Nicole, Taylor, etc.) are NOT hops.
+    Team-to-team traversals are collapsed. Only external hops count.
+    """
     if db_path is None:
         db_path = get_db_path()
 
@@ -72,9 +128,11 @@ def find_all_paths(target_company_id: int, max_hops: int = 3, db_path: str = Non
         return []
 
     team = get_team_contacts(db_path)
+    team_ids = get_team_ids(db_path)
     targets = get_company_contacts(target_company_id, db_path)
 
     paths = []
+    seen = set()  # Deduplicate by (from_id, to_id)
 
     for target in targets:
         target_node = f"contact_{target['id']}"
@@ -85,20 +143,52 @@ def find_all_paths(target_company_id: int, max_hops: int = 3, db_path: str = Non
             try:
                 path, weight = find_shortest_path(graph, team_node, target_node)
 
-                if path and len(path) - 1 <= max_hops:
-                    path_names = resolve_path_names(path, db_path)
+                if path:
+                    # Count external hops only (team = 1 unit)
+                    external_hops = _count_external_hops(path, team_ids)
 
-                    paths.append({
-                        "from": team_member['name'],
-                        "from_id": team_member['id'],
-                        "to": target['name'],
-                        "to_id": target['id'],
-                        "to_title": target.get('title', ''),
-                        "to_role": target.get('role_level', ''),
-                        "hops": len(path) - 1,
-                        "path": path_names,
-                        "path_ids": path
-                    })
+                    if external_hops <= max_hops:
+                        dedup_key = (team_member['id'], target['id'])
+                        if dedup_key in seen:
+                            continue
+                        seen.add(dedup_key)
+
+                        collapsed = _collapse_team_hops(path, team_ids)
+                        path_names = resolve_path_names(collapsed, db_path)
+
+                        # Find the team member who actually connects externally
+                        via_member = team_member['name']
+                        for node in path:
+                            if node.startswith("contact_"):
+                                nid = int(node.replace("contact_", ""))
+                                if nid in team_ids:
+                                    # Check if this team member connects to non-team
+                                    idx = path.index(node)
+                                    if idx + 1 < len(path):
+                                        next_node = path[idx + 1]
+                                        if next_node.startswith("contact_"):
+                                            next_id = int(next_node.replace("contact_", ""))
+                                            if next_id not in team_ids:
+                                                # This team member is the connector
+                                                for t in team:
+                                                    if t['id'] == nid:
+                                                        via_member = t['name']
+                                                        break
+                                                break
+
+                        paths.append({
+                            "from": team_member['name'],
+                            "from_id": team_member['id'],
+                            "via": via_member,
+                            "to": target['name'],
+                            "to_id": target['id'],
+                            "to_title": target.get('title', ''),
+                            "to_role": target.get('role_level', ''),
+                            "hops": external_hops,
+                            "path": path_names,
+                            "path_ids": collapsed,
+                            "raw_path_ids": path,
+                        })
             except Exception:
                 continue
 
@@ -193,7 +283,8 @@ def find_warm_intros(target_company_id: int, db_path: str = None) -> Dict:
                 "from_client": client['name']
             })
 
-    # Direct relationships (strength >= 4)
+    # Direct relationships — any team member to target contact (any strength)
+    # Team is one unit, so if ANY team member knows someone, we all have access
     cur.execute("""
         SELECT
             c1.first_name || ' ' || c1.last_name as team_member,
@@ -207,13 +298,38 @@ def find_warm_intros(target_company_id: int, db_path: str = None) -> Dict:
         JOIN contacts c2 ON r.contact_id_b = c2.id
         JOIN companies comp ON c2.company_id = comp.id
         WHERE comp.id = ?
-        AND r.strength >= 4
         AND c1.role_level = 'team'
         ORDER BY r.strength DESC
     """, (target_company_id,))
+    # Also check reverse direction
+    rows_a = [dict(r) for r in cur.fetchall()]
 
-    for row in cur.fetchall():
-        result["direct_relationships"].append(dict(row))
+    cur.execute("""
+        SELECT
+            c2.first_name || ' ' || c2.last_name as team_member,
+            c1.first_name || ' ' || c1.last_name as target_contact,
+            c1.title as target_title,
+            r.strength,
+            r.relationship_type,
+            r.context
+        FROM relationships r
+        JOIN contacts c1 ON r.contact_id_a = c1.id
+        JOIN contacts c2 ON r.contact_id_b = c2.id
+        JOIN companies comp ON c1.company_id = comp.id
+        WHERE comp.id = ?
+        AND c2.role_level = 'team'
+        ORDER BY r.strength DESC
+    """, (target_company_id,))
+
+    rows_b = [dict(r) for r in cur.fetchall()]
+
+    # Combine and deduplicate
+    seen_pairs = set()
+    for row in rows_a + rows_b:
+        pair = (row['team_member'], row['target_contact'])
+        if pair not in seen_pairs:
+            seen_pairs.add(pair)
+            result["direct_relationships"].append(row)
 
     conn.close()
 
@@ -222,13 +338,18 @@ def find_warm_intros(target_company_id: int, db_path: str = None) -> Dict:
 
     if result["direct_relationships"]:
         dr = result["direct_relationships"][0]
-        result["best_path"] = f"Direct: {dr['team_member']} knows {dr['target_contact']}"
+        result["best_path"] = (f"{dr['team_member']} knows {dr['target_contact']} "
+                               f"({dr['target_title']}) directly")
     elif result["former_employees"]:
         fe = result["former_employees"][0]
         result["best_path"] = f"Former employee: {fe['name']} came from {fe['from_client']}"
     elif result["two_hop_paths"]:
         tp = result["two_hop_paths"][0]
-        result["best_path"] = f"{tp['hops']}-hop: {' → '.join(tp['path'])}"
+        via = tp.get('via', tp['from'])
+        if tp['hops'] == 1:
+            result["best_path"] = f"Via {via} → {tp['to']} (1 hop)"
+        else:
+            result["best_path"] = f"{tp['hops']}-hop: {' → '.join(tp['path'])}"
     else:
         result["best_path"] = "No warm path found — cold outreach needed"
 

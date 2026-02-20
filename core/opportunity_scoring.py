@@ -20,6 +20,7 @@ from core.graph_engine import (get_db_path, build_graph, find_shortest_path,
 from core.thresholds import (WEIGHTS_DEFAULT, WEIGHTS_HIGH_GROWTH,
                              WEIGHTS_INSTITUTIONAL, CASH_BONUS_THRESHOLD,
                              HALF_LIFE_CASH)
+from core.signals import score_funding_impact
 
 
 # =============================================================================
@@ -65,35 +66,37 @@ HALF_LIFE_RELATIONSHIP = 730  # 2 years
 
 def score_company_funding(company_id: int, conn: sqlite3.Connection) -> float:
     """
-    Score based on recent funding events.
+    Score based on recent funding events, weighted by company-size impact.
+
+    Uses score_funding_impact() so that $50M for a startup scores HIGH
+    while $50M for Blackstone scores LOW.
+
     Returns 0-100 score.
     """
     cur = conn.cursor()
     cur.execute("""
-        SELECT event_date, amount 
-        FROM funding_events 
+        SELECT event_date, amount
+        FROM funding_events
         WHERE company_id = ?
         ORDER BY event_date DESC
         LIMIT 5
     """, (company_id,))
-    
+
     events = cur.fetchall()
     if not events:
         return 0.0
-    
+
     total_score = 0.0
     for event_date, amount in events:
         days = days_since(event_date)
         decay = decay_factor(days, HALF_LIFE_FUNDING)
-        
-        # Amount factor (log scale, normalized)
-        if amount and amount > 0:
-            amount_factor = min(math.log10(amount + 1) / 9, 1.0)  # $1B = 1.0
-        else:
-            amount_factor = 0.3  # Unknown amount
-        
-        total_score += decay * amount_factor * 100
-    
+
+        # Size-relative impact (0-100) replaces old flat log-scale
+        impact = score_funding_impact(amount or 0, company_id, conn=conn)
+        impact_factor = impact / 100.0  # Normalize to 0-1
+
+        total_score += decay * impact_factor * 100
+
     return min(total_score, 100.0)
 
 
@@ -503,6 +506,29 @@ def compute_company_opportunity_score(
 
     # Compute weighted total (only sum dimensions present in the weight profile)
     total = sum(scores.get(k, 0) * weights.get(k, 0) for k in weights)
+
+    # SPOC adjustment — reduce score if company is SPOCed or in follow-up
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT spoc_status, spoc_follow_up_date FROM companies WHERE id = ?",
+                    (company_id,))
+        spoc_row = cur.fetchone()
+        if spoc_row:
+            spoc_status = spoc_row[0]
+            spoc_fu = spoc_row[1]
+            if spoc_status == 'spoced':
+                total *= 0.1
+                scores['spoc_multiplier'] = 0.1
+            elif spoc_status and spoc_status.startswith('follow_up_'):
+                if spoc_fu and spoc_fu > datetime.now().strftime('%Y-%m-%d'):
+                    total *= 0.3
+                    scores['spoc_multiplier'] = 0.3
+                else:
+                    # Follow-up date passed — flag for review, normal scoring
+                    scores['spoc_review'] = True
+    except Exception:
+        pass  # Column may not exist in test DBs
+
     scores['total'] = total
     scores['company_id'] = company_id
     scores['category'] = category
@@ -893,14 +919,162 @@ def generate_daily_insights(db_path: Optional[str] = None) -> Dict:
     return insights
 
 
+# =============================================================================
+# SCORE EXPLANATION
+# =============================================================================
+
+def explain_score(company_id: int, db_path: Optional[str] = None) -> Dict:
+    """
+    Explain a company's opportunity score with human-readable breakdown.
+
+    Returns dict with base_score, boosts, multipliers, final_score,
+    top_signals, warm_intro, top_reasons.
+    """
+    if db_path is None:
+        db_path = get_db_path()
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+
+    cur.execute("SELECT id, name, status, opportunity_score FROM companies WHERE id = ?",
+                (company_id,))
+    row = cur.fetchone()
+    if not row:
+        conn.close()
+        return {'company_name': 'Unknown', 'final_score': 0, 'boosts': [], 'top_signals': []}
+
+    company_name = row['name']
+    graph = build_graph(db_path)
+    scores = compute_company_opportunity_score(company_id, conn, graph)
+
+    explanation = {
+        'company_name': company_name,
+        'company_status': row['status'],
+        'final_score': scores['total'],
+        'boosts': [],
+        'multipliers': [],
+        'top_signals': [],
+        'warm_intro': None,
+        'top_reasons': [],
+    }
+
+    # Funding
+    funding_score = scores.get('funding', 0)
+    if funding_score > 0:
+        cur.execute("""
+            SELECT event_date, amount, round_type FROM funding_events
+            WHERE company_id = ? ORDER BY event_date DESC LIMIT 1
+        """, (company_id,))
+        fe = cur.fetchone()
+        if fe:
+            amt = f"${fe['amount']:,.0f}" if fe['amount'] else "undisclosed"
+            detail = f"{fe['round_type']} {amt} ({fe['event_date'][:10]})"
+            d = days_since(fe['event_date'])
+            weight = '2.0x' if d <= 30 else '1.0x'
+            pts = funding_score * (2.0 if d <= 30 else 1.0)
+            explanation['boosts'].append({'label': 'Funding', 'points': pts,
+                                          'detail': detail, 'weight': weight})
+            explanation['top_signals'].append(f"Raised {amt} ({fe.get('round_type', '')})")
+
+    # Hiring
+    hiring_score = scores.get('hiring', 0)
+    if hiring_score > 0:
+        cur.execute("""
+            SELECT signal_type, description, signal_date FROM hiring_signals
+            WHERE company_id = ? ORDER BY signal_date DESC LIMIT 1
+        """, (company_id,))
+        hs = cur.fetchone()
+        if hs:
+            detail = hs['description'] or hs['signal_type']
+            is_re = any(kw in (detail or '').lower()
+                       for kw in ['real estate', 'facilities', 'workplace', 'office'])
+            mult = 3.0 if is_re else 1.0
+            label = 'Hired RE/Facilities' if is_re else 'Hiring Activity'
+            explanation['boosts'].append({'label': label, 'points': hiring_score * mult,
+                                          'detail': (detail or '')[:80],
+                                          'weight': f'{mult}x'})
+            if is_re:
+                explanation['top_signals'].append(f"Hired {(detail or '')[:50]}")
+
+    # Lease expiry
+    lease_score = scores.get('lease_expiry', 0)
+    if lease_score > 0:
+        cur.execute("""
+            SELECT lease_expiry, square_feet FROM leases
+            WHERE company_id = ? AND lease_expiry >= date('now')
+            ORDER BY lease_expiry ASC LIMIT 1
+        """, (company_id,))
+        le = cur.fetchone()
+        if le:
+            sf = f"{le['square_feet']:,} SF" if le['square_feet'] else ""
+            explanation['boosts'].append({'label': 'Lease Expiring', 'points': lease_score * 2.0,
+                                          'detail': f"{le['lease_expiry']} {sf}", 'weight': '2.0x'})
+            explanation['top_signals'].append(f"Lease expiring {le['lease_expiry']} {sf}")
+
+    # Relationship / warm intro
+    rel_score = scores.get('relationship', 0)
+    if rel_score > 0:
+        cur.execute("""
+            SELECT c1.first_name || ' ' || c1.last_name as tm,
+                   c2.first_name || ' ' || c2.last_name as cn, c2.title
+            FROM relationships r
+            JOIN contacts c1 ON r.contact_id_a = c1.id
+            JOIN contacts c2 ON r.contact_id_b = c2.id
+            WHERE c2.company_id = ? AND c1.role_level = 'team'
+            ORDER BY r.strength DESC LIMIT 1
+        """, (company_id,))
+        rel = cur.fetchone()
+        if rel:
+            explanation['warm_intro'] = f"{rel['tm']} knows {rel['cn']} ({rel['title']})"
+            explanation['boosts'].append({'label': 'Team Knows Contact',
+                                          'points': rel_score * 1.5,
+                                          'detail': explanation['warm_intro'],
+                                          'weight': '1.5x'})
+
+    # Exec change
+    try:
+        cur.execute("""
+            SELECT person_name, new_title, priority FROM executive_changes
+            WHERE company_id = ? AND effective_date >= date('now', '-90 days')
+            AND priority IN ('high', 'medium')
+            ORDER BY effective_date DESC LIMIT 1
+        """, (company_id,))
+        ec = cur.fetchone()
+        if ec and ec['priority'] == 'high':
+            explanation['boosts'].append({'label': 'CEO/CFO Change', 'points': 15,
+                                          'detail': f"{ec['person_name']} — {ec['new_title']}",
+                                          'weight': '1.5x'})
+            explanation['top_signals'].append(f"{ec['person_name']} → {ec['new_title']}")
+    except Exception:
+        pass
+
+    # SPOC
+    spoc_mult = scores.get('spoc_multiplier')
+    if spoc_mult:
+        explanation['multipliers'].append({'label': 'SPOCed', 'factor': spoc_mult})
+
+    # Compound bonus: funding + hiring = 2.5x
+    if scores.get('funding', 0) > 0 and scores.get('hiring', 0) > 0:
+        explanation['multipliers'].append({'label': 'Compound (Funding+Hiring)', 'factor': 2.5})
+
+    explanation['base_score'] = sum(b['points'] for b in explanation['boosts'])
+
+    sorted_boosts = sorted(explanation['boosts'], key=lambda x: x['points'], reverse=True)
+    explanation['top_reasons'] = [f"{b['label']}: {b['detail']}" for b in sorted_boosts[:3]]
+
+    conn.close()
+    return explanation
+
+
 if __name__ == "__main__":
     print("Computing opportunity scores...")
     save_opportunity_scores()
-    
+
     print("\nTop 10 Opportunities:")
     for i, opp in enumerate(get_top_opportunities(10), 1):
         print(f"  {i}. {opp['name']} ({opp['status']}): {opp['opportunity_score']:.1f}")
-    
+
     print("\nDaily Insights:")
     insights = generate_daily_insights()
     print(f"  High Priority: {len(insights['high_priority'])}")

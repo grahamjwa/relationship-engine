@@ -307,3 +307,25 @@ Traceback (most recent call last):
   File "/Users/brazosdedios/relationship_engine/graph_engine.py", line 44, in build_graph
 sqlite3.OperationalError: unable to open database file
 2026-02-18 23:00:00,374 [INFO] Job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-20 02:00:00 EST)" executed successfully
+2026-02-19 03:00:00,166 [INFO] Running job "Morning Signal Scan (trigger: cron[hour='6', minute='0'], next run at: 2026-02-20 06:00:00 EST)" (scheduled at 2026-02-19 06:00:00-05:00)
+2026-02-19 03:00:00,168 [INFO] Starting morning signal scan...
+2026-02-19 03:00:00,175 [ERROR] Morning scan failed: unable to open database file
+2026-02-19 03:00:00,175 [INFO] Job "Morning Signal Scan (trigger: cron[hour='6', minute='0'], next run at: 2026-02-20 06:00:00 EST)" executed successfully
+2026-02-19 04:00:00,050 [INFO] Running job "Morning Briefing (trigger: cron[hour='7', minute='0'], next run at: 2026-02-20 07:00:00 EST)" (scheduled at 2026-02-19 07:00:00-05:00)
+2026-02-19 04:00:00,054 [ERROR] Job "Morning Briefing (trigger: cron[hour='7', minute='0'], next run at: 2026-02-20 07:00:00 EST)" raised an exception
+Traceback (most recent call last):
+  File "/opt/homebrew/lib/python3.14/site-packages/apscheduler/executors/base.py", line 131, in run_job
+  File "/Users/brazosdedios/relationship_engine/morning_briefing.py", line 195, in run_morning_briefing
+  File "/Users/brazosdedios/relationship_engine/morning_briefing.py", line 34, in get_briefing_data
+sqlite3.OperationalError: unable to open database file
+2026-02-19 14:00:00,404 [INFO] Running job "Afternoon Signal Scan (trigger: cron[hour='17', minute='0'], next run at: 2026-02-20 17:00:00 EST)" (scheduled at 2026-02-19 17:00:00-05:00)
+2026-02-19 14:00:00,405 [INFO] Starting afternoon signal scan...
+2026-02-19 14:00:00,412 [ERROR] Afternoon scan failed: unable to open database file
+2026-02-19 14:00:00,413 [INFO] Job "Afternoon Signal Scan (trigger: cron[hour='17', minute='0'], next run at: 2026-02-20 17:00:00 EST)" executed successfully
+2026-02-19 23:00:00,355 [INFO] Running job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-21 02:00:00 EST)" (scheduled at 2026-02-20 02:00:00-05:00)
+Traceback (most recent call last):
+  File "/Users/brazosdedios/relationship_engine/nightly_recompute.py", line 219, in run_nightly
+  File "/Users/brazosdedios/relationship_engine/graph_engine.py", line 319, in compute_all
+  File "/Users/brazosdedios/relationship_engine/graph_engine.py", line 44, in build_graph
+sqlite3.OperationalError: unable to open database file
+2026-02-19 23:00:00,363 [INFO] Job "Nightly Graph Recompute (trigger: cron[hour='2', minute='0'], next run at: 2026-02-21 02:00:00 EST)" executed successfully
